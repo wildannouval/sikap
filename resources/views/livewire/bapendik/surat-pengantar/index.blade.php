@@ -11,6 +11,19 @@ use Livewire\WithPagination;
 new #[Title('Validasi Surat Pengantar')] #[Layout('components.layouts.app')] class extends Component {
     use WithPagination;
 
+    #[Url(as: 'q')]
+    public string $search = '';
+
+    #[Url]
+    public string $statusFilter = '';
+
+    public function updated($property)
+    {
+        if (in_array($property, ['search', 'statusFilter'])) {
+            $this->resetPage();
+        }
+    }
+
     // Properti untuk Modal Penolakan
     public ?int $suratToRejectId = null;
     public string $rejectionNote = '';
@@ -23,7 +36,20 @@ new #[Title('Validasi Surat Pengantar')] #[Layout('components.layouts.app')] cla
     #[Computed]
     public function pengajuanSurat()
     {
-        return SuratPengantar::with('mahasiswa.user')->latest()->paginate(5);
+        return SuratPengantar::with('mahasiswa.user')
+            // Logika Search
+            ->when($this->search, function ($query) {
+                $query->whereHas('mahasiswa', function ($q) {
+                    $q->where('nama_mahasiswa', 'like', '%' . $this->search . '%')
+                        ->orWhere('nim', 'like', '%' . $this->search . '%');
+                })->orWhere('lokasi_surat_pengantar', 'like', '%' . $this->search . '%');
+            })
+            // Logika Filter Status
+            ->when($this->statusFilter, function ($query) {
+                $query->where('status_surat_pengantar', $this->statusFilter);
+            })
+            ->latest()
+            ->paginate(10);
     }
 
     /**
@@ -123,10 +149,43 @@ new #[Title('Validasi Surat Pengantar')] #[Layout('components.layouts.app')] cla
             </flux:subheading>
         </div>
     </div>
-    <flux:separator variant="subtle"/>
+    <flux:separator/>
 
     {{-- Tabel dalam Card --}}
-    <flux:card class="mt-8">
+    <flux:card class="space-y-6 mt-6">
+        <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <!-- Keterangan Kiri -->
+            <div class="flex-1">
+                <flux:heading size="lg" class="text-lg">Daftar Pengajuan Surat Pengantar</flux:heading>
+                <flux:text variant="subtle" class="mt-1">
+                    Dibawah ini data daftar pengajuan mahasiswa yang perlu di proses.
+                </flux:text>
+            </div>
+
+            <!-- Filter, Search, dan Tombol -->
+            <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
+                <flux:select wire:model.live="statusFilter" size="sm" class="w-full sm:w-40" placeholder="Semua Status">
+                    <option value="">Semua Status</option>
+                    <option value="Diajukan">Diajukan</option>
+                    <option value="Disetujui">Disetujui</option>
+                    <option value="Ditolak">Ditolak</option>
+                </flux:select>
+                <flux:input
+                    wire:model.live.debounce.300ms="search"
+                    placeholder="Cari mhs/nim/instansi..."
+                    size="sm"
+                    icon="magnifying-glass"
+                    class="w-full sm:w-auto"
+                />
+
+                <flux:modal.trigger name="create-pengajuan-surat-pengantar">
+                    <flux:button variant="primary" icon="plus" size="sm">Buat Pengajuan</flux:button>
+                </flux:modal.trigger>
+            </div>
+        </div>
+
+        <flux:separator variant="subtle"/>
+
         <flux:table>
             <flux:table.columns>
                 <flux:table.column>Nama Mahasiswa</flux:table.column>

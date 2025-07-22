@@ -14,6 +14,7 @@ class DatabaseSeeder extends Seeder
     public function run(): void
     {
         // PANGGIL SEEDER YANG KITA BUAT
-        $this->call(UserRoleSeeder::class);
+//        $this->call(UserRoleSeeder::class);
+        $this->call(ProductionLikeSeeder::class);
     }
 }

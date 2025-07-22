@@ -5,12 +5,29 @@ use Flux\Flux;
 use Livewire\Attributes\Computed;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Title;
+use Livewire\Attributes\Url;
 use Livewire\Volt\Component;
 use Illuminate\Support\Facades\Auth;
 use Livewire\WithPagination;
 
 new #[Title('Surat Pengantar')] #[Layout('components.layouts.app')] class extends Component {
     use WithPagination;
+
+    // Tambahkan properti ini di bawah `use WithPagination;`
+    #[Url(as: 'q')] // Menyimpan query pencarian di URL
+    public string $search = '';
+
+    #[Url] // Menyimpan status filter di URL
+    public string $statusFilter = '';
+
+// Tambahkan fungsi ini di dalam class
+    public function updated($property)
+    {
+        // Jika $search atau $statusFilter berubah, reset paginasi ke halaman 1
+        if (in_array($property, ['search', 'statusFilter'])) {
+            $this->resetPage();
+        }
+    }
 
     // Properti Form
     public string $lokasi_surat_pengantar = '';
@@ -27,6 +44,14 @@ new #[Title('Surat Pengantar')] #[Layout('components.layouts.app')] class extend
         }
 
         return SuratPengantar::where('mahasiswa_id', $mahasiswaId)
+            // Terapkan pencarian jika $search tidak kosong
+            ->when($this->search, function ($query) {
+                $query->where('lokasi_surat_pengantar', 'like', '%' . $this->search . '%');
+            })
+            // Terapkan filter status jika $statusFilter tidak kosong
+            ->when($this->statusFilter, function ($query) {
+                $query->where('status_surat_pengantar', $this->statusFilter);
+            })
             ->latest()
             ->paginate(5);
     }
@@ -73,6 +98,7 @@ new #[Title('Surat Pengantar')] #[Layout('components.layouts.app')] class extend
         }
 
         $surat->delete();
+        Flux::modal("'delete-surat-' . $surat->id")->close();
         Flux::toast(variant: 'success', heading: 'Berhasil', text: 'Pengajuan surat berhasil dihapus.');
     }
 
@@ -83,6 +109,21 @@ new #[Title('Surat Pengantar')] #[Layout('components.layouts.app')] class extend
         Flux::modal('catatan-modal')->show();
     }
 
+    public string $sortBy = 'tanggal_pengajuan_surat_pengantar';
+    public string $sortDirection = 'desc';
+
+    public function sort($column)
+    {
+        if ($this->sortBy === $column) {
+            $this->sortDirection = $this->sortDirection === 'asc' ? 'desc' : 'asc';
+        } else {
+            $this->sortBy = $column;
+            $this->sortDirection = 'asc';
+        }
+    }
+
+
+
 }; ?>
 
 <div>
@@ -92,22 +133,74 @@ new #[Title('Surat Pengantar')] #[Layout('components.layouts.app')] class extend
             <flux:subheading size="lg" class="mb-6">Riwayat pengajuan surat pengantar kerja praktik Anda.
             </flux:subheading>
         </div>
-        <flux:modal.trigger name="create-pengajuan-surat-pengantar">
-            <flux:button variant="primary" icon="plus">Buat Pengajuan</flux:button>
-        </flux:modal.trigger>
+        {{--        <flux:modal.trigger name="create-pengajuan-surat-pengantar">--}}
+        {{--            <flux:button variant="primary" icon="plus">Buat Pengajuan</flux:button>--}}
+        {{--        </flux:modal.trigger>--}}
     </div>
-    <flux:separator variant="subtle"/>
 
-    <flux:card class="mt-8">
-        {{-- Kita akan memisahkan tabel dan paginasi --}}
+    <flux:separator/>
+
+    <flux:card class="space-y-6 mt-6">
+        <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <!-- Keterangan Kiri -->
+            <div class="flex-1">
+                <flux:heading size="lg" class="text-lg">Daftar Pengajuan Surat Pengantar</flux:heading>
+                <flux:text variant="subtle" class="mt-1">
+                    Setelah surat keterangan Anda berstatus <b>disetujui</b> atau <b>ditolak</b>, Anda dapat mengajukan kembali dengan menuliskan form di bawah. Sistem akan menyimpannya sebagai ajuan baru.
+                </flux:text>
+            </div>
+
+            <!-- Filter, Search, dan Tombol -->
+            <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
+                <flux:select wire:model.live="statusFilter" size="sm" class="w-full sm:w-40">
+                    <option value="">Semua Status</option>
+                    <option value="Diajukan">Diajukan</option>
+                    <option value="Disetujui">Disetujui</option>
+                    <option value="Ditolak">Ditolak</option>
+                </flux:select>
+
+                <flux:input
+                    wire:model.live.debounce.300ms="search"
+                    placeholder="Cari instansi..."
+                    size="sm"
+                    icon="magnifying-glass"
+                    class="w-full sm:w-56"
+                />
+
+                <flux:modal.trigger name="create-pengajuan-surat-pengantar">
+                    <flux:button variant="primary" icon="plus" size="sm">Buat Pengajuan</flux:button>
+                </flux:modal.trigger>
+            </div>
+        </div>
+
+        <flux:separator variant="subtle"/>
+
         <flux:table>
             <flux:table.columns>
-                <flux:table.column>Instansi Tujuan</flux:table.column>
-                <flux:table.column>Tgl. Pengajuan</flux:table.column>
+                <flux:table.column
+                    sortable
+                    :sorted="$sortBy === 'lokasi_surat_pengantar'"
+                    :direction="$sortDirection"
+                    wire:click="sort('lokasi_surat_pengantar')"
+                >
+                    Instansi Tujuan
+                </flux:table.column>
+
+                <flux:table.column
+                    sortable
+                    :sorted="$sortBy === 'tanggal_pengajuan_surat_pengantar'"
+                    :direction="$sortDirection"
+                    wire:click="sort('tanggal_pengajuan_surat_pengantar')"
+                >
+                    Tgl. Pengajuan
+                </flux:table.column>
+
                 <flux:table.column>Status</flux:table.column>
                 <flux:table.column>Keterangan</flux:table.column>
                 <flux:table.column>Aksi</flux:table.column>
             </flux:table.columns>
+
+
             <flux:table.rows>
                 @forelse ($this->riwayatSurat as $surat)
                     <flux:table.row :key="$surat->id">
@@ -188,11 +281,6 @@ new #[Title('Surat Pengantar')] #[Layout('components.layouts.app')] class extend
                 @endforelse
             </flux:table.rows>
         </flux:table>
-
-        {{-- PERBAIKAN 3: Menampilkan Paginasi secara Manual --}}
-        <div class="border-t p-4 dark:border-neutral-700">
-            <flux:pagination :paginator="$this->riwayatSurat"/>
-        </div>
     </flux:card>
 
     <flux:modal name="create-pengajuan-surat-pengantar" class="md:w-900">

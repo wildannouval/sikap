@@ -6,6 +6,7 @@ use Flux\Flux;
 use Livewire\Attributes\Computed;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Title;
+use Livewire\Attributes\Url;
 use Livewire\Volt\Component;
 use Livewire\WithPagination;
 use Illuminate\Support\Facades\Storage;
@@ -14,8 +15,16 @@ use Illuminate\Support\Str;
 new #[Title('Validasi Proposal KP')] #[Layout('components.layouts.app')] class extends Component {
     use WithPagination;
 
-    // Properti untuk Tabs
+    // Properti untuk state halaman
     public string $tab = 'proses';
+    #[Url(as: 'q')]
+    public string $search = '';
+    #[Url]
+    public string $statusFilter = '';
+    #[Url]
+    public string $sortField = 'created_at';
+    #[Url]
+    public string $sortDirection = 'desc';
 
     // Properti untuk Modal Detail & Aksi
     public ?KerjaPraktek $kpToProcess = null;
@@ -25,6 +34,39 @@ new #[Title('Validasi Proposal KP')] #[Layout('components.layouts.app')] class e
 
     // Properti BARU untuk menampung ID dosen yang dipilih dari dropdown
     public ?int $selectedDosenId = null;
+
+    // Hook untuk reset paginasi
+    public function updated($property)
+    {
+        if (in_array($property, ['search', 'statusFilter', 'tab'])) {
+            $this->resetPage();
+        }
+    }
+
+    // Fungsi untuk sorting
+    public function sortBy($field)
+    {
+        if ($this->sortField === $field) {
+            $this->sortDirection = $this->sortDirection === 'asc' ? 'desc' : 'asc';
+        } else {
+            $this->sortField = $field;
+            $this->sortDirection = 'asc';
+        }
+    }
+
+    // Base query untuk menghindari duplikasi kode
+    private function getBaseQuery()
+    {
+        return KerjaPraktek::with(['mahasiswa.jurusan'])
+            ->when($this->search, function ($query) {
+                // Tambahkan pengelompokan where di sini
+                $query->where(function ($subQuery) {
+                    $subQuery->where('judul_kp', 'like', '%' . $this->search . '%')
+                        ->orWhereHas('mahasiswa', fn($q) => $q->where('nama_mahasiswa', 'like', '%' . $this->search . '%'));
+                });
+            })
+            ->orderBy($this->sortField, $this->sortDirection);
+    }
 
     /**
      * Properti BARU untuk mengambil semua data dosen sebagai pilihan
@@ -38,9 +80,8 @@ new #[Title('Validasi Proposal KP')] #[Layout('components.layouts.app')] class e
     #[Computed]
     public function pengajuanKp()
     {
-        return KerjaPraktek::with(['mahasiswa.jurusan'])
+        return $this->getBaseQuery()
             ->where('status_pengajuan_kp', 'Proses di Komisi')
-            ->latest()
             ->paginate(10, ['*'], 'prosesPage');
     }
 
@@ -50,9 +91,9 @@ new #[Title('Validasi Proposal KP')] #[Layout('components.layouts.app')] class e
     #[Computed]
     public function riwayatValidasi()
     {
-        return KerjaPraktek::with(['mahasiswa.jurusan'])
+        return $this->getBaseQuery()
             ->whereIn('status_pengajuan_kp', ['Disetujui', 'Ditolak'])
-            ->latest()
+            ->when($this->statusFilter, fn($q) => $q->where('status_pengajuan_kp', $this->statusFilter))
             ->paginate(10, ['*'], 'riwayatPage');
     }
 
@@ -116,6 +157,22 @@ new #[Title('Validasi Proposal KP')] #[Layout('components.layouts.app')] class e
     </div>
     <flux:separator variant="subtle"/>
 
+    {{-- Input Search & Filter BARU --}}
+    <div class="mt-6 flex flex-col md:flex-row gap-4">
+        <div class="flex-1">
+            <flux:input wire:model.live.debounce.300ms="search" placeholder="Cari berdasarkan nama mahasiswa atau judul KP..." icon="magnifying-glass" />
+        </div>
+        @if ($tab === 'riwayat')
+            <div class="w-full md:w-64">
+                <flux:select wire:model.live="statusFilter" placeholder="Filter status riwayat">
+                    <option value="">Semua Status Riwayat</option>
+                    <option value="Disetujui">Disetujui</option>
+                    <option value="Ditolak">Ditolak</option>
+                </flux:select>
+            </div>
+        @endif
+    </div>
+
     {{-- Grup Tab --}}
     <flux:tab.group class="mt-4">
         <flux:tabs wire:model.live="tab">
@@ -126,10 +183,10 @@ new #[Title('Validasi Proposal KP')] #[Layout('components.layouts.app')] class e
         {{-- Panel untuk Tab "Perlu Diproses" --}}
         <flux:tab.panel name="proses">
             <flux:card class="mt-4">
-                <flux:table>
+                <flux:table :paginate="$this->pengajuanKp">
                     <flux:table.columns>
-                        <flux:table.column>Nama Mahasiswa</flux:table.column>
-                        <flux:table.column>Judul KP</flux:table.column>
+                        <flux:table.column class="cursor-pointer" wire:click="sortBy('mahasiswa.nama_mahasiswa')">Nama Mahasiswa</flux:table.column>
+                        <flux:table.column class="cursor-pointer" wire:click="sortBy('judul_kp')">Judul KP</flux:table.column>
                         <flux:table.column>Berkas</flux:table.column>
                         <flux:table.column>Aksi</flux:table.column>
                     </flux:table.columns>
@@ -159,19 +216,16 @@ new #[Title('Validasi Proposal KP')] #[Layout('components.layouts.app')] class e
                         @endforelse
                     </flux:table.rows>
                 </flux:table>
-                <div class="border-t p-4 dark:border-neutral-700">
-                    <Flux:pagination :paginator="$this->pengajuanKp"/>
-                </div>
             </flux:card>
         </flux:tab.panel>
 
         {{-- Panel untuk Tab "Riwayat Validasi" --}}
         <flux:tab.panel name="riwayat">
             <flux:card class="mt-4">
-                <flux:table>
+                <flux:table :paginate="$this->riwayatValidasi">
                     <flux:table.columns>
-                        <flux:table.column>Nama Mahasiswa</flux:table.column>
-                        <flux:table.column>Judul KP</flux:table.column>
+                        <flux:table.column class="cursor-pointer" wire:click="sortBy('mahasiswa.nama_mahasiswa')">Nama Mahasiswa</flux:table.column>
+                        <flux:table.column class="cursor-pointer" wire:click="sortBy('judul_kp')">Judul KP</flux:table.column>
                         <flux:table.column>Status Akhir</flux:table.column>
                     </flux:table.columns>
                     <flux:table.rows>
@@ -193,9 +247,6 @@ new #[Title('Validasi Proposal KP')] #[Layout('components.layouts.app')] class e
                         @endforelse
                     </flux:table.rows>
                 </flux:table>
-                <div class="border-t p-4 dark:border-neutral-700">
-                    <Flux:pagination :paginator="$this->riwayatValidasi"/>
-                </div>
             </flux:card>
         </flux:tab.panel>
     </flux:tab.group>

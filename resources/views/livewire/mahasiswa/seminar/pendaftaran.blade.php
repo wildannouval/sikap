@@ -7,24 +7,38 @@ use Flux\Flux;
 use Livewire\Attributes\Computed;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Title;
+use Livewire\Attributes\Url;
 use Livewire\Volt\Component;
 use Livewire\WithFileUploads;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
+use Livewire\WithPagination;
 
 new #[Title('Pendaftaran Seminar')] #[Layout('components.layouts.app')] class extends Component {
     use WithFileUploads;
+    use WithPagination;
 
     public ?KerjaPraktek $kerjaPraktek = null;
     public int $jumlahBimbinganTerverifikasi = 0;
     public bool $isEligible = false;
 
-    // Properti untuk Form
+    // Properti Form
     public string $judul_kp_final = '';
     public string $tanggal_seminar = '';
     public ?int $ruangan_id = null;
     public string $jam_mulai = '';
     public string $jam_selesai = '';
     public $berkas_laporan_final;
+
+    // Properti State
+    #[Url(as: 'q')]
+    public string $search = '';
+    #[Url]
+    public string $sortField = 'created_at';
+    #[Url]
+    public string $sortDirection = 'desc';
+    public ?Seminar $seminarToView = null;
 
     /**
      * Dijalankan saat komponen dimuat.
@@ -71,10 +85,27 @@ new #[Title('Pendaftaran Seminar')] #[Layout('components.layouts.app')] class ex
     public function riwayatSeminar()
     {
         if (!$this->kerjaPraktek) {
-            return collect();
+            return Seminar::where('id', -1)->paginate(5);
         }
-        // Tambahkan with('ruangan') untuk Eager Loading
-        return Seminar::with('ruangan')->where('kerja_praktek_id', $this->kerjaPraktek->id)->latest()->get();
+        return Seminar::with('ruangan')
+            ->where('kerja_praktek_id', $this->kerjaPraktek->id)
+            ->when($this->search, fn($q) => $q->where('judul_kp_final', 'like', '%' . $this->search . '%'))
+            ->orderBy($this->sortField, $this->sortDirection)
+            ->paginate(5);
+    }
+
+    public function updatedSearch() {
+        $this->resetPage();
+    }
+
+    public function sortBy($field)
+    {
+        if ($this->sortField === $field) {
+            $this->sortDirection = $this->sortDirection === 'asc' ? 'desc' : 'asc';
+        } else {
+            $this->sortField = $field;
+            $this->sortDirection = 'asc';
+        }
     }
 
     /**
@@ -129,6 +160,15 @@ new #[Title('Pendaftaran Seminar')] #[Layout('components.layouts.app')] class ex
         $seminar->delete();
         Flux::toast(variant: 'success', heading: 'Berhasil', text: 'Pendaftaran seminar berhasil dihapus.');
     }
+
+    /**
+     * Fungsi BARU untuk membuka modal detail.
+     */
+    public function showDetail($id)
+    {
+        $this->seminarToView = Seminar::findOrFail($id);
+        Flux::modal('detail-seminar-modal')->show();
+    }
 }; ?>
 
 <div>
@@ -171,23 +211,26 @@ new #[Title('Pendaftaran Seminar')] #[Layout('components.layouts.app')] class ex
                 <p class="text-sm">Syarat untuk mendaftar seminar adalah minimal memiliki 6 catatan bimbingan yang telah diverifikasi oleh Dosen Pembimbing. Saat ini Anda memiliki **{{ $this->jumlahBimbinganTerverifikasi }} bimbingan terverifikasi**.</p>
             </flux:callout>
         @endif
-
-        {{-- Ganti blok placeholder tabel riwayat Anda dengan ini --}}
         <div class="mt-8">
             <flux:heading size="lg">Riwayat Pendaftaran Seminar Anda</flux:heading>
             <flux:card class="mt-4">
-                <flux:table>
+                {{-- Search & Sort BARU --}}
+                <div class="mb-4">
+                    <flux:input wire:model.live.debounce.300ms="search" placeholder="Cari judul seminar..." icon="magnifying-glass" />
+                </div>
+                <flux:table :paginate="$this->riwayatSeminar">
                     <flux:table.columns>
-                        <flux:table.column>Judul Final</flux:table.column>
-                        <flux:table.column>Usulan Jadwal</flux:table.column>
+                        <flux:table.column class="cursor-pointer" wire:click="sortBy('judul_kp_final')">Judul Final</flux:table.column>
+                        <flux:table.column class="cursor-pointer" wire:click="sortBy('tanggal_seminar')">Usulan Jadwal</flux:table.column>
                         <flux:table.column>Status</flux:table.column>
+                        <flux:table.column>Keterangan</flux:table.column>
                         <flux:table.column>Aksi</flux:table.column>
                     </flux:table.columns>
                     <flux:table.rows>
                         @forelse ($this->riwayatSeminar as $seminar)
                             <flux:table.row :key="$seminar->id">
                                 <flux:table.cell variant="strong">{{ Str::limit($seminar->judul_kp_final, 40) }}</flux:table.cell>
-                                <flux:table.cell>{{ \Carbon\Carbon::parse($seminar->tanggal_seminar)->format('d/m/Y') }}, {{ $seminar->jam_mulai }}</flux:table.cell>
+                                <flux:table.cell>{{ \Carbon\Carbon::parse($seminar->tanggal_seminar)->format('d/m/Y') }}, {{ \Carbon\Carbon::parse($seminar->jam_mulai)->format('H:i') }}</flux:table.cell>
                                 <flux:table.cell>
                                     @php
                                         $color = match($seminar->status_seminar) {
@@ -202,16 +245,28 @@ new #[Title('Pendaftaran Seminar')] #[Layout('components.layouts.app')] class ex
                                     <flux:badge :color="$color" size="sm">{{ $seminar->status_seminar }}</flux:badge>
                                 </flux:table.cell>
                                 <flux:table.cell>
-                                    @if ($seminar->status_seminar === 'Diajukan')
-                                        <flux:modal.trigger :name="'delete-seminar-' . $seminar->id">
-                                            <flux:button variant="danger" size="xs">Hapus</flux:button>
-                                        </flux:modal.trigger>
+                                    {{-- Menampilkan Catatan Penolakan BARU --}}
+                                    @if ($seminar->status_seminar === 'Ditolak' && $seminar->catatan)
+                                        <flux:dropdown position="top" align="start">
+                                            <flux:button variant="ghost" size="xs" class="!text-indigo-600 !p-0">Lihat Catatan</flux:button>
+                                            <flux:popover class="max-w-xs p-3 text-sm">{{ $seminar->catatan }}</flux:popover>
+                                        </flux:dropdown>
                                     @else
                                         -
                                     @endif
                                 </flux:table.cell>
+                                <flux:table.cell>
+                                    <div class="flex items-center gap-2">
+                                        {{-- Tombol Detail BARU --}}
+                                        <flux:button size="xs" wire:click="showDetail({{ $seminar->id }})">Detail</flux:button>
+                                        @if ($seminar->status_seminar === 'Diajukan')
+                                            <flux:modal.trigger :name="'delete-seminar-' . $seminar->id">
+                                                <flux:button variant="danger" size="xs">Hapus</flux:button>
+                                            </flux:modal.trigger>
+                                        @endif
+                                    </div>
+                                </flux:table.cell>
                             </flux:table.row>
-
                             {{-- Modal Konfirmasi Hapus --}}
                             @if ($seminar->status_seminar === 'Diajukan')
                                 <flux:modal :name="'delete-seminar-' . $seminar->id" class="md:w-96">
@@ -249,4 +304,37 @@ new #[Title('Pendaftaran Seminar')] #[Layout('components.layouts.app')] class ex
             <p>Anda belum memiliki Kerja Praktik yang aktif.</p>
         </flux:card>
     @endif
+
+    {{-- Modal BARU untuk Lihat Detail --}}
+    <flux:modal name="detail-seminar-modal" class="md:w-[32rem]">
+        @if ($seminarToView)
+            <div class="space-y-6">
+                <div><flux:heading size="lg">Detail Pendaftaran Seminar</flux:heading></div>
+                <div class="space-y-4 rounded-lg border bg-neutral-50 p-4 dark:border-neutral-700 dark:bg-neutral-900">
+                    <div class="grid grid-cols-3 gap-2 text-sm">
+                        <span class="text-neutral-500">Judul Final</span>
+                        <span class="col-span-2 font-semibold">{{ $seminarToView->judul_kp_final }}</span>
+                    </div>
+                    <div class="grid grid-cols-3 gap-2 text-sm">
+                        <span class="text-neutral-500">Usulan Jadwal</span>
+                        <span class="col-span-2">{{ \Carbon\Carbon::parse($seminarToView->tanggal_seminar)->format('d F Y') }}, {{ \Carbon\Carbon::parse($seminarToView->jam_mulai)->format('H:i') }} - {{ \Carbon\Carbon::parse($seminarToView->jam_selesai)->format('H:i') }}</span>
+                    </div>
+                    <div class="grid grid-cols-3 gap-2 text-sm">
+                        <span class="text-neutral-500">Usulan Ruangan</span>
+                        <span class="col-span-2">{{ $seminarToView->ruangan->nama_ruangan }}</span>
+                    </div>
+                    <hr class="dark:border-neutral-700">
+                    <div class="grid grid-cols-3 gap-2 text-sm">
+                        <span class="text-neutral-500">Laporan Final</span>
+                        <div class="col-span-2">
+                            <flux:button as="a" href="{{ asset('storage/' . $seminarToView->berkas_laporan_final) }}" target="_blank" size="xs" icon="document-arrow-down">Unduh Laporan</flux:button>
+                        </div>
+                    </div>
+                </div>
+                <div class="flex justify-end">
+                    <flux:modal.close><flux:button variant="ghost">Tutup</flux:button></flux:modal.close>
+                </div>
+            </div>
+        @endif
+    </flux:modal>
 </div>

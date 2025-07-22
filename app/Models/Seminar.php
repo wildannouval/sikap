@@ -22,6 +22,7 @@ class Seminar extends Model
         'berita_acara_signed',
         'tanggal_pengambilan_berita_acara',
         'nilai_seminar',
+        'catatan',
     ];
 
     public function kerjaPraktek(): BelongsTo

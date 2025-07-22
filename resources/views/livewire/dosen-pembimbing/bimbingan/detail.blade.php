@@ -6,11 +6,14 @@ use Flux\Flux;
 use Livewire\Attributes\Computed;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Title;
+use Livewire\Attributes\Url;
 use Livewire\Volt\Component;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Str;
+use Livewire\WithPagination;
 
 new #[Title('Detail Bimbingan')] #[Layout('components.layouts.app')] class extends Component {
+    use WithPagination;
 
     public KerjaPraktek $kp;
 
@@ -18,12 +21,21 @@ new #[Title('Detail Bimbingan')] #[Layout('components.layouts.app')] class exten
     public ?Konsultasi $konsultasiToProcess = null;
     public string $catatan_dosen = '';
 
+    // Properti BARU untuk Search, Filter, Sort
+    #[Url(as: 'q')]
+    public string $search = '';
+    #[Url]
+    public string $statusFilter = '';
+    #[Url]
+    public string $sortField = 'tanggal_konsultasi';
+    #[Url]
+    public string $sortDirection = 'desc';
+
     /**
      * Menerima data KerjaPraktek dari route.
      */
     public function mount(KerjaPraktek $kp)
     {
-        // Otorisasi: Pastikan dosen yang login adalah pembimbing dari KP ini
         if ($kp->dosen_pembimbing_id !== Auth::user()->dosen?->id) {
             abort(403, 'Akses Ditolak');
         }
@@ -34,8 +46,29 @@ new #[Title('Detail Bimbingan')] #[Layout('components.layouts.app')] class exten
     public function konsultasis()
     {
         return Konsultasi::where('kerja_praktek_id', $this->kp->id)
-            ->latest('tanggal_konsultasi')
-            ->get();
+            ->when($this->search, fn($q) => $q->where('topik_konsultasi', 'like', '%' . $this->search . '%'))
+            ->when($this->statusFilter, fn($q) => $q->where('status_verifikasi', $this->statusFilter))
+            ->orderBy($this->sortField, $this->sortDirection)
+            ->paginate(10);
+    }
+
+    // Hook BARU untuk reset paginasi
+    public function updated($property)
+    {
+        if (in_array($property, ['search', 'statusFilter'])) {
+            $this->resetPage();
+        }
+    }
+
+    // Fungsi BARU untuk sorting
+    public function sortBy($field)
+    {
+        if ($this->sortField === $field) {
+            $this->sortDirection = $this->sortDirection === 'asc' ? 'desc' : 'asc';
+        } else {
+            $this->sortField = $field;
+            $this->sortDirection = 'asc';
+        }
     }
 
     public function openVerificationModal($id)
@@ -98,9 +131,23 @@ new #[Title('Detail Bimbingan')] #[Layout('components.layouts.app')] class exten
 
     {{-- Tabel Riwayat Bimbingan --}}
     <flux:card class="mt-8">
-        <flux:table>
+        {{-- Header Card dengan tombol Search & Filter BARU --}}
+        <div class="flex flex-col sm:flex-row items-center justify-between gap-4 p-4 border-b dark:border-neutral-700">
+            <div class="flex-1 w-full sm:w-auto">
+                <flux:input wire:model.live.debounce.300ms="search" placeholder="Cari topik bimbingan..." icon="magnifying-glass" />
+            </div>
+            <div class="w-full sm:w-56">
+                <flux:select wire:model.live="statusFilter" placeholder="Filter Status">
+                    <option value="">Semua Status</option>
+                    <option value="Menunggu Verifikasi">Menunggu Verifikasi</option>
+                    <option value="Diverifikasi">Diverifikasi</option>
+                    <option value="Revisi">Revisi</option>
+                </flux:select>
+            </div>
+        </div>
+        <flux:table :paginate="$this->konsultasis">
             <flux:table.columns>
-                <flux:table.column>Tanggal</flux:table.column>
+                <flux:table.column class="cursor-pointer" wire:click="sortBy('tanggal_konsultasi')">Tanggal</flux:table.column>
                 <flux:table.column>Topik Pembahasan</flux:table.column>
                 <flux:table.column>Status Verifikasi</flux:table.column>
                 <flux:table.column>Aksi</flux:table.column>
@@ -127,13 +174,6 @@ new #[Title('Detail Bimbingan')] #[Layout('components.layouts.app')] class exten
                                 <flux:button size="xs" variant="primary" wire:click="openVerificationModal({{ $konsultasi->id }})">
                                     {{ $konsultasi->status_verifikasi === 'Menunggu Verifikasi' ? 'Verifikasi' : 'Edit' }}
                                 </flux:button>
-
-                                {{-- Tombol Batalkan hanya muncul jika sudah diverifikasi --}}
-{{--                                @if($konsultasi->status_verifikasi !== 'Menunggu Verifikasi')--}}
-{{--                                    <flux:modal.trigger :name="'cancel-verification-' . $konsultasi->id">--}}
-{{--                                        <flux:button size="xs" variant="ghost">Batalkan</flux:button>--}}
-{{--                                    </flux:modal.trigger>--}}
-{{--                                @endif--}}
                             </div>
                         </flux:table.cell>
                     </flux:table.row>
