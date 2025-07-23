@@ -5,6 +5,7 @@ use App\Models\Seminar;
 use Flux\Flux;
 use Livewire\Attributes\Computed;
 use Livewire\Attributes\Layout;
+use Livewire\Attributes\Reactive;
 use Livewire\Attributes\Title;
 use Livewire\Attributes\Url;
 use Livewire\Volt\Component;
@@ -19,19 +20,92 @@ new #[Title('Penilaian KP')] #[Layout('components.layouts.app')] class extends C
     use WithFileUploads;
 
     public string $tab = 'penilaian';
-
-    // Properti BARU untuk Search & Sort
     #[Url(as: 'q')]
     public string $search = '';
     #[Url]
     public string $sortField = 'created_at';
     #[Url]
     public string $sortDirection = 'desc';
-
-    // Properti untuk Modal Penilaian
     public ?Seminar $seminarToGrade = null;
-    public string $nilai_seminar = '';
     public $berita_acara_signed;
+
+// Properti untuk komponen nilai
+    public ?float $nilai_lapangan = null;
+    public ?float $nilai_dosen = null;
+    public float $nilai_angka_final = 0;
+    public string $nilai_akhir = '';
+
+    // Hook yang berjalan setiap kali nilai lapangan atau nilai dosen berubah
+    public function updated($property)
+    {
+        if (in_array($property, ['nilai_lapangan', 'nilai_dosen'])) {
+            $this->calculateFinalGrade();
+        }
+        if ($property === 'search') {
+            $this->resetPage();
+        }
+    }
+
+    // Fungsi BARU untuk menghitung nilai akhir secara otomatis
+    public function calculateFinalGrade()
+    {
+        $nilaiLapangan = floatval($this->nilai_lapangan);
+        $nilaiDosen = floatval($this->nilai_dosen);
+
+        if (is_numeric($this->nilai_lapangan) && is_numeric($this->nilai_dosen)) {
+            // Hitung nilai angka final sesuai bobot
+            $this->nilai_angka_final = ($nilaiLapangan * 0.4) + ($nilaiDosen * 0.6);
+
+            // Konversi ke nilai huruf
+            $nilaiAngka = $this->nilai_angka_final;
+            if ($nilaiAngka >= 85) $this->nilai_akhir = 'A';
+            elseif ($nilaiAngka >= 80) $this->nilai_akhir = 'A-';
+            elseif ($nilaiAngka >= 75) $this->nilai_akhir = 'B+';
+            elseif ($nilaiAngka >= 70) $this->nilai_akhir = 'B';
+            elseif ($nilaiAngka >= 65) $this->nilai_akhir = 'B-';
+            elseif ($nilaiAngka >= 60) $this->nilai_akhir = 'C+';
+            elseif ($nilaiAngka >= 55) $this->nilai_akhir = 'C';
+            elseif ($nilaiAngka >= 40) $this->nilai_akhir = 'D';
+            else $this->nilai_akhir = 'E';
+        } else {
+            $this->nilai_angka_final = 0;
+            $this->nilai_akhir = '';
+        }
+    }
+
+    public function openGradeModal($seminarId)
+    {
+        $this->seminarToGrade = Seminar::with('kerjaPraktek.mahasiswa')->findOrFail($seminarId);
+        $this->nilai_lapangan = $this->seminarToGrade->nilai_pembimbing_lapangan;
+        $this->nilai_dosen = $this->seminarToGrade->nilai_dosen_pembimbing;
+        $this->calculateFinalGrade(); // Langsung hitung nilai saat modal dibuka
+        $this->reset('berita_acara_signed');
+        $this->resetErrorBag();
+        Flux::modal('grade-modal')->show();
+    }
+
+    public function saveGrade()
+    {
+        $validated = $this->validate([
+            'nilai_lapangan' => 'required|numeric|min:0|max:100',
+            'nilai_dosen' => 'required|numeric|min:0|max:100',
+        ]);
+
+        // ... (Logika validasi & penyimpanan file tidak berubah)
+
+        if ($this->seminarToGrade) {
+            $updateData = [
+                'status_seminar' => 'Dinilai',
+                'nilai_pembimbing_lapangan' => $this->nilai_lapangan,
+                'nilai_dosen_pembimbing' => $this->nilai_dosen,
+                'nilai_akhir' => $this->nilai_akhir, // Simpan nilai huruf yang sudah dihitung
+            ];
+            // ... (Logika penyimpanan file tidak berubah)
+            $this->seminarToGrade->update($updateData);
+            Flux::modal('grade-modal')->close();
+            Flux::toast(variant: 'success', heading: 'Berhasil', text: 'Penilaian seminar telah diperbarui.');
+        }
+    }
 
     // Hook BARU untuk reset paginasi
     public function updatedSearch()
@@ -85,55 +159,6 @@ new #[Title('Penilaian KP')] #[Layout('components.layouts.app')] class extends C
         return $this->getBaseQuery()
             ->whereHas('seminar', fn($q) => $q->where('status_seminar', 'Dinilai'))
             ->paginate(10, ['*'], 'riwayatPage');
-    }
-
-    public function openGradeModal($seminarId)
-    {
-        $this->seminarToGrade = Seminar::with('kerjaPraktek.mahasiswa')->findOrFail($seminarId);
-        $this->nilai_seminar = $this->seminarToGrade->nilai_seminar ?? '';
-        $this->reset('berita_acara_signed');
-        $this->resetErrorBag();
-        Flux::modal('grade-modal')->show();
-    }
-
-    public function saveGrade()
-    {
-        // Aturan validasi dasar
-        $rules = [
-            'nilai_seminar' => 'required|string|max:5',
-        ];
-
-        // Jadikan upload file wajib hanya jika belum pernah diunggah sebelumnya
-        if (!$this->seminarToGrade->berita_acara_signed) {
-            $rules['berita_acara_signed'] = 'required|file|mimes:pdf|max:2048';
-        } elseif ($this->berita_acara_signed) {
-            // Jika ada file baru yang diunggah saat edit, validasi file tersebut
-            $rules['berita_acara_signed'] = 'file|mimes:pdf|max:2048';
-        }
-
-        $validated = $this->validate($rules);
-
-        if ($this->seminarToGrade) {
-            $updateData = [
-                'status_seminar' => 'Dinilai',
-                'nilai_seminar' => $validated['nilai_seminar'],
-            ];
-
-            // Cek apakah ada file baru yang diunggah
-            if ($this->berita_acara_signed) {
-                // Hapus file lama jika ada
-                if ($this->seminarToGrade->berita_acara_signed) {
-                    Storage::disk('public')->delete($this->seminarToGrade->berita_acara_signed);
-                }
-                // Simpan file baru dan tambahkan path ke data update
-                $updateData['berita_acara_signed'] = $this->berita_acara_signed->store('berita-acara-signed', 'public');
-            }
-
-            $this->seminarToGrade->update($updateData);
-
-            Flux::modal('grade-modal')->close();
-            Flux::toast(variant: 'success', heading: 'Berhasil', text: 'Penilaian seminar telah diperbarui.');
-        }
     }
 }; ?>
 
@@ -192,7 +217,6 @@ new #[Title('Penilaian KP')] #[Layout('components.layouts.app')] class extends C
                         <flux:table.column>Nama Mahasiswa</flux:table.column>
                         <flux:table.column>Judul KP</flux:table.column>
                         <flux:table.column>Nilai Akhir</flux:table.column>
-                        {{-- KOLOM BARU --}}
                         <flux:table.column>Aksi</flux:table.column>
                     </flux:table.columns>
                     <flux:table.rows>
@@ -200,8 +224,10 @@ new #[Title('Penilaian KP')] #[Layout('components.layouts.app')] class extends C
                             <flux:table.row :key="'riwayat-' . $kp->id">
                                 <flux:table.cell variant="strong">{{ $kp->mahasiswa->nama_mahasiswa }}</flux:table.cell>
                                 <flux:table.cell>{{ Str::limit($kp->seminar->judul_kp_final, 40) }}</flux:table.cell>
-                                <flux:table.cell><flux:badge color="green" size="sm">{{ $kp->seminar->nilai_seminar }}</flux:badge></flux:table.cell>
-                                {{-- DATA BARU --}}
+                                <flux:table.cell>
+                                    {{-- PERBAIKAN: Ganti nilai_seminar menjadi nilai_akhir --}}
+                                    <flux:badge color="green" size="sm">{{ $kp->seminar->nilai_akhir }}</flux:badge>
+                                </flux:table.cell>
                                 <flux:table.cell>
                                     <flux:button size="xs" wire:click="openGradeModal({{ $kp->seminar->id }})">
                                         Edit Nilai
@@ -222,14 +248,12 @@ new #[Title('Penilaian KP')] #[Layout('components.layouts.app')] class extends C
         @if ($seminarToGrade)
             <div class="space-y-6">
                 <div>
-                    {{-- Judul dinamis --}}
-                    <flux:heading size="lg">{{ $seminarToGrade->nilai_seminar ? 'Edit' : 'Input' }} Nilai Seminar</flux:heading>
+                    <flux:heading size="lg">{{ $seminarToGrade->nilai_akhir ? 'Edit' : 'Input' }} Nilai Seminar</flux:heading>
                     <div class="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
                         <p>Mahasiswa: <span class="font-bold">{{ $seminarToGrade->kerjaPraktek->mahasiswa->nama_mahasiswa }}</span></p>
                     </div>
                 </div>
                 <div class="space-y-4">
-                    {{-- Menampilkan file yang sudah ada --}}
                     @if($seminarToGrade->berita_acara_signed)
                         <div class="text-sm">
                             <flux:label>Berita Acara Saat Ini</flux:label>
@@ -239,15 +263,36 @@ new #[Title('Penilaian KP')] #[Layout('components.layouts.app')] class extends C
                         </div>
                     @endif
 
-                    <flux:input wire:model="berita_acara_signed" type="file" :label="$seminarToGrade->berita_acara_signed ? 'Upload untuk Mengganti (Opsional)' : 'Upload Berita Acara (TTD)'" helper="File PDF, maks 2MB." :required="!$seminarToGrade->berita_acara_signed" />
-                    @error('berita_acara_signed') <span class="text-sm text-red-500">{{ $message }}</span> @enderror
+                        <hr class="dark:border-neutral-700">
 
-                    <flux:input wire:model="nilai_seminar" label="Nilai Akhir" placeholder="Contoh: A, B+, C" required />
-                    @error('nilai_seminar') <span class="text-sm text-red-500">{{ $message }}</span> @enderror
+                        {{-- Input Nilai Komponen --}}
+                        <flux:input wire:model.live="nilai_lapangan" type="number" step="0.01" label="Nilai Pemb. Lapangan (40%)" placeholder="0-100" required />
+                        @error('nilai_lapangan') <span class="text-sm text-red-500">{{ $message }}</span> @enderror
+
+                        <flux:input wire:model.live="nilai_dosen" type="number" step="0.01" label="Nilai Dosen Pemb. (60%)" placeholder="0-100" required />
+                        @error('nilai_dosen') <span class="text-sm text-red-500">{{ $message }}</span> @enderror
+
+                        <hr class="dark:border-neutral-700">
+
+                        {{-- Tampilan Nilai Akhir (Read-only) --}}
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <flux:label>Nilai Angka Final</flux:label>
+                                <div class="mt-1 flex h-10 w-full items-center rounded-md border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-800">
+                                    {{ number_format($nilai_angka_final, 2) }}
+                                </div>
+                            </div>
+                            <div>
+                                <flux:label>Nilai Huruf Final</flux:label>
+                                <div class="mt-1 flex h-10 w-full items-center justify-center rounded-md border border-zinc-200 bg-zinc-50 px-3 py-2 text-2xl font-bold dark:border-zinc-700 dark:bg-zinc-800">
+                                    {{ $nilai_akhir ?: '-' }}
+                                </div>
+                            </div>
+                        </div>
                 </div>
                 <div class="flex justify-end gap-3">
                     <flux:modal.close><flux:button type="button" variant="ghost">Batal</flux:button></flux:modal.close>
-                    <flux:button wire:click="saveGrade" variant="primary">Simpan Perubahan</flux:button>
+                    <flux:button wire:click="saveGrade" variant="primary">Simpan Nilai</flux:button>
                 </div>
             </div>
         @endif

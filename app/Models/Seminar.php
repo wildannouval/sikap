@@ -21,7 +21,9 @@ class Seminar extends Model
         'status_seminar',
         'berita_acara_signed',
         'tanggal_pengambilan_berita_acara',
-        'nilai_seminar',
+        'nilai_akhir', // Ganti dari nilai_seminar
+        'nilai_pembimbing_lapangan', // Tambahkan ini
+        'nilai_dosen_pembimbing', // Tambahkan ini
         'catatan',
     ];
 
