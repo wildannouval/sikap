@@ -11,6 +11,15 @@
                 <x-app-logo />
             </a>
 
+            <flux:navlist variant="outline" class="mt-4">
+                <flux:navlist.item
+                    href="{{ route('notifications.index') }}"
+                    icon="bell"
+                    :badge="auth()->user()->unreadNotifications()->count() > 0 ? auth()->user()->unreadNotifications()->count() : ''">
+                    Notifikasi
+                </flux:navlist.item>
+            </flux:navlist>
+
             <flux:navlist variant="outline">
                 {{-- Tampilkan Menu Sesuai Role --}}
                 @if(auth()->user()->role === 'Mahasiswa')
@@ -61,14 +70,19 @@
                         <flux:navlist.item icon="document-magnifying-glass" :href="route('doskom.validasi-kp')" :current="request()->routeIs('doskom.validasi-kp.*')" wire:navigate>{{ __('Validasi Pengajuan KP') }}</flux:navlist.item>
                         <flux:navlist.item icon="archive-box" :href="route('doskom.laporan')" :current="request()->routeIs('doskom.laporan.*')" wire:navigate>{{ __('Laporan & Arsip') }}</flux:navlist.item>
                     </flux:navlist.group>
-
                 @endif
+
             </flux:navlist>
 
             <flux:spacer />
 
-        {{-- Bagian User Menu di Bawah Sidebar --}}
+{{--         Bagian User Menu di Bawah Sidebar--}}
 {{--            <flux:navlist variant="outline">--}}
+{{--Button notifikasi--}}
+{{--                <flux:navlist.item icon="bell-alert" href="#" target="_blank">--}}
+{{--                Route ke notifikasi--}}
+{{--                </flux:navlist.item>--}}
+
 {{--                <flux:navlist.item icon="folder-git-2" href="https://github.com/laravel/livewire-starter-kit" target="_blank">--}}
 {{--                {{ __('Repository') }}--}}
 {{--                </flux:navlist.item>--}}

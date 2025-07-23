@@ -7,6 +7,8 @@ use Livewire\Attributes\Layout;
 use Livewire\Attributes\Title;
 use Livewire\Volt\Component;
 use Livewire\WithPagination;
+use App\Notifications\SuratPengantarDisetujui;
+use App\Notifications\SuratPengantarDitolak;
 
 new #[Title('Validasi Surat Pengantar')] #[Layout('components.layouts.app')] class extends Component {
     use WithPagination;
@@ -78,6 +80,8 @@ new #[Title('Validasi Surat Pengantar')] #[Layout('components.layouts.app')] cla
                 'tanggal_pengambilan_surat_pengantar' => $this->tanggalPengambilan,
             ]);
 
+            $this->suratToProcess->mahasiswa->user->notify(new SuratPengantarDisetujui($this->suratToProcess));
+
             Flux::modal('approve-modal')->close();
             Flux::toast(variant: 'success', heading: 'Berhasil', text: 'Surat pengantar berhasil disetujui.');
             $this->reset('suratToProcess', 'tanggalPengambilan');
@@ -115,6 +119,7 @@ new #[Title('Validasi Surat Pengantar')] #[Layout('components.layouts.app')] cla
         Flux::modal('approve-modal')->close();
         Flux::toast(variant: 'success', heading: 'Berhasil', text: 'Surat pengantar telah ditolak.');
         $this->reset('suratToRejectId', 'rejectionNote');
+        $surat->mahasiswa->user->notify(new SuratPengantarDitolak($surat));
     }
 
     /**

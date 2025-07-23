@@ -11,6 +11,8 @@ use Livewire\Volt\Component;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Str;
 use Livewire\WithPagination;
+use App\Notifications\BimbinganDiverifikasi;
+use App\Notifications\BimbinganRevisi;
 
 new #[Title('Detail Bimbingan')] #[Layout('components.layouts.app')] class extends Component {
     use WithPagination;
@@ -92,6 +94,11 @@ new #[Title('Detail Bimbingan')] #[Layout('components.layouts.app')] class exten
             ]);
             Flux::modal('verification-modal')->close();
             Flux::toast(variant: 'success', heading: 'Berhasil', text: 'Catatan bimbingan telah diverifikasi.');
+        }
+        if ($newStatus === 'Diverifikasi') {
+            $this->konsultasiToProcess->mahasiswa->user->notify(new BimbinganDiverifikasi($this->konsultasiToProcess));
+        } else { // Revisi
+            $this->konsultasiToProcess->mahasiswa->user->notify(new BimbinganRevisi($this->konsultasiToProcess));
         }
     }
 

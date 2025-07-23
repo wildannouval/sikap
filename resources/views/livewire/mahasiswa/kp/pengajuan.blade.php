@@ -11,6 +11,9 @@ use Livewire\WithFileUploads;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Str;
 use Livewire\WithPagination;
+use App\Models\User;
+use App\Notifications\PengajuanKpBaru;
+use Illuminate\Support\Facades\Notification;
 
 new #[Title('Pengajuan KP')] #[Layout('components.layouts.app')] class extends Component {
     // Gunakan trait WithFileUploads
@@ -71,9 +74,11 @@ new #[Title('Pengajuan KP')] #[Layout('components.layouts.app')] class extends C
         $validated['surat_keterangan_kp'] = $this->surat_keterangan_kp->store('surat-keterangan', 'public');
         $validated['mahasiswa_id'] = Auth::user()->mahasiswa->id;
         $validated['tanggal_pengajuan_kp'] = now();
-        KerjaPraktek::create($validated);
         Flux::toast(variant: 'success', heading: 'Berhasil', text: 'Pengajuan Kerja Praktik telah terkirim.');
         $this->reset('judul_kp', 'lokasi_kp', 'proposal_kp', 'surat_keterangan_kp');
+        $kpBaru = KerjaPraktek::create($validated);
+        $bapendikUsers = User::where('role', 'Bapendik')->get();
+        Notification::send($bapendikUsers, new PengajuanKpBaru($kpBaru));
     }
 
     /**

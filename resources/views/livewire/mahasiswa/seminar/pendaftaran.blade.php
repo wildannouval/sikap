@@ -14,6 +14,9 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Livewire\WithPagination;
+use App\Models\User;
+use App\Notifications\PendaftaranSeminarBaru;
+use Illuminate\Support\Facades\Notification;
 
 new #[Title('Pendaftaran Seminar')] #[Layout('components.layouts.app')] class extends Component {
     use WithFileUploads;
@@ -130,10 +133,12 @@ new #[Title('Pendaftaran Seminar')] #[Layout('components.layouts.app')] class ex
         $validated['berkas_laporan_final'] = $this->berkas_laporan_final->store('laporan-final', 'public');
         $validated['kerja_praktek_id'] = $this->kerjaPraktek->id;
 
-        Seminar::create($validated);
-
         Flux::toast(variant: 'success', heading: 'Berhasil', text: 'Pendaftaran seminar telah terkirim dan akan diverifikasi oleh Bapendik.');
         $this->reset('tanggal_seminar', 'ruangan_id', 'jam_mulai', 'jam_selesai', 'berkas_laporan_final');
+
+        $seminarBaru = Seminar::create($validated);
+        $bapendikUsers = User::where('role', 'Bapendik')->get();
+        Notification::send($bapendikUsers, new PendaftaranSeminarBaru($seminarBaru));
     }
 
     /**

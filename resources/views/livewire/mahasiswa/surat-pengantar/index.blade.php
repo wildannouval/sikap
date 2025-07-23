@@ -9,6 +9,9 @@ use Livewire\Attributes\Url;
 use Livewire\Volt\Component;
 use Illuminate\Support\Facades\Auth;
 use Livewire\WithPagination;
+use App\Models\User;
+use App\Notifications\PengajuanSuratBaru;
+use Illuminate\Support\Facades\Notification;
 
 new #[Title('Surat Pengantar')] #[Layout('components.layouts.app')] class extends Component {
     use WithPagination;
@@ -74,7 +77,16 @@ new #[Title('Surat Pengantar')] #[Layout('components.layouts.app')] class extend
         $validated['mahasiswa_id'] = $mahasiswa->id;
         $validated['tanggal_pengajuan_surat_pengantar'] = now();
 
-        SuratPengantar::create($validated);
+        $suratBaru = SuratPengantar::create($validated);
+
+        // --- BLOK KODE BARU UNTUK MENGIRIM NOTIFIKASI ---
+        // 1. Cari semua pengguna dengan peran Bapendik
+        $bapendikUsers = User::where('role', 'Bapendik')->get();
+
+        // 2. Kirim notifikasi ke semua Bapendik yang ditemukan
+        if ($bapendikUsers->isNotEmpty()) {
+            Notification::send($bapendikUsers, new PengajuanSuratBaru($suratBaru));
+        }
 
         Flux::toast(variant: 'success', heading: 'Berhasil', text: 'Surat pengantar berhasil diajukan.');
 

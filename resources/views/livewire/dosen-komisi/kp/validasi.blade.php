@@ -11,6 +11,11 @@ use Livewire\Volt\Component;
 use Livewire\WithPagination;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use App\Notifications\KpDitolakKomisi;
+use App\Models\User;
+use App\Notifications\KpDisetujui;
+use Illuminate\Support\Facades\Notification;
+use App\Notifications\PembimbingDitugaskan;
 
 new #[Title('Validasi Proposal KP')] #[Layout('components.layouts.app')] class extends Component {
     use WithPagination;
@@ -121,8 +126,20 @@ new #[Title('Validasi Proposal KP')] #[Layout('components.layouts.app')] class e
             $this->kpToProcess->update([
                 'status_pengajuan_kp' => 'Disetujui',
                 'tanggal_disetujui_kp' => now(),
-                'dosen_pembimbing_id' => $this->selectedDosenId, // <-- Simpan ID dosen
+                'dosen_pembimbing_id' => $this->selectedDosenId,
             ]);
+            // 1. Cari Dosen Pembimbing yang baru ditugaskan
+            $dosenPembimbing = Dosen::find($this->selectedDosenId);
+            if ($dosenPembimbing) {
+                // 2. Kirim notifikasi ke Dosen Pembimbing tersebut
+                $dosenPembimbing->user->notify(new PembimbingDitugaskan($this->kpToProcess));
+            }
+            // Kirim notifikasi ke Mahasiswa
+            $this->kpToProcess->mahasiswa->user->notify(new KpDisetujui($this->kpToProcess));
+// Kirim notifikasi ke Bapendik
+            $bapendikUsers = User::where('role', 'Bapendik')->get();
+            Notification::send($bapendikUsers, new KpDisetujui($this->kpToProcess));
+
             Flux::modal('approve-confirm-modal')->close();
             Flux::modal('process-modal')->close();
             Flux::toast(variant: 'success', heading: 'Berhasil', text: 'Pengajuan KP telah disetujui dan pembimbing telah ditugaskan.');
@@ -144,7 +161,7 @@ new #[Title('Validasi Proposal KP')] #[Layout('components.layouts.app')] class e
             Flux::modal('process-modal')->close();
             Flux::toast(variant: 'success', heading: 'Berhasil', text: 'Pengajuan KP telah ditolak.');
         }
-    }
+        $this->kpToProcess->mahasiswa->user->notify(new KpDitolakKomisi($this->kpToProcess));    }
 }; ?>
 
 <div>

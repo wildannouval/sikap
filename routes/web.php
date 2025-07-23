@@ -87,6 +87,8 @@ Route::middleware(['auth'])->group(function () {
 
     Route::get('/seminar/{id}/export-berita-acara', [SeminarController::class, 'exportBeritaAcara'])
         ->name('seminar.export-berita-acara');
+
+    Volt::route('/notifications', 'notifications.index')->name('notifications.index');
 });
 
 require __DIR__.'/auth.php';

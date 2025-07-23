@@ -11,6 +11,7 @@ use Livewire\Volt\Component;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Str;
 use Livewire\WithPagination;
+use App\Notifications\BimbinganBaru;
 
 new #[Title('Bimbingan KP')] #[Layout('components.layouts.app')] class extends Component {
     use WithPagination;
@@ -92,7 +93,7 @@ new #[Title('Bimbingan KP')] #[Layout('components.layouts.app')] class extends C
             $this->konsultasiToEdit->update($validated);
             Flux::toast(variant: 'success', heading: 'Berhasil', text: 'Catatan bimbingan berhasil diperbarui.');
         } else {
-            Konsultasi::create([
+            $konsultasiBaru = Konsultasi::create([
                 'kerja_praktek_id' => $this->kerjaPraktek->id,
                 'mahasiswa_id' => $this->kerjaPraktek->mahasiswa_id,
                 'dosen_pembimbing_id' => $this->kerjaPraktek->dosen_pembimbing_id,
@@ -104,6 +105,7 @@ new #[Title('Bimbingan KP')] #[Layout('components.layouts.app')] class extends C
 
         Flux::modal('bimbingan-modal')->close();
         $this->resetForm();
+        $this->kerjaPraktek->dosenPembimbing->user->notify(new BimbinganBaru($konsultasiBaru));
     }
 
     /**

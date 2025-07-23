@@ -11,6 +11,7 @@ use Livewire\Volt\Component;
 use Livewire\WithPagination;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use App\Notifications\SeminarDijadwalkan;
 
 new #[Title('Penjadwalan Seminar')] #[Layout('components.layouts.app')] class extends Component {
     use WithPagination;
@@ -119,6 +120,7 @@ new #[Title('Penjadwalan Seminar')] #[Layout('components.layouts.app')] class ex
             Flux::toast(variant: 'success', heading: 'Berhasil', text: 'Seminar telah dijadwalkan.');
             $this->dispatch('seminar-scheduled-and-publish', id: $this->seminarToProcess->id);
         }
+        $this->seminarToProcess->kerjaPraktek->mahasiswa->user->notify(new SeminarDijadwalkan($this->seminarToProcess));
     }
 }; ?>
 

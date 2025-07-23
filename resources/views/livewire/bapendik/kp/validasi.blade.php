@@ -10,6 +10,12 @@ use Livewire\Volt\Component;
 use Livewire\WithPagination;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use App\Models\User;
+use App\Notifications\KpDiteruskanKeKomisi;
+use Illuminate\Support\Facades\Notification;
+use App\Notifications\SpkTerbit;
+use App\Notifications\KpDitolakKomisi;
+
 
 new #[Title('Validasi Berkas KP')] #[Layout('components.layouts.app')] class extends Component {
     use WithPagination;
@@ -90,6 +96,11 @@ new #[Title('Validasi Berkas KP')] #[Layout('components.layouts.app')] class ext
     {
         KerjaPraktek::findOrFail($id)->update(['status_pengajuan_kp' => 'Proses di Komisi']);
         Flux::toast(variant: 'success', heading: 'Berhasil', text: 'Pengajuan KP telah diteruskan ke Komisi.');
+
+        $kp = KerjaPraktek::findOrFail($id);
+        $kp->update(['status_pengajuan_kp' => 'Proses di Komisi']);
+        $komisiUsers = User::where('role', 'Dosen Komisi')->get();
+        Notification::send($komisiUsers, new KpDiteruskanKeKomisi($kp));
     }
 
     public function reject($id)
@@ -103,7 +114,9 @@ new #[Title('Validasi Berkas KP')] #[Layout('components.layouts.app')] class ext
 
     public function openSpkModal($id)
     {
-        $this->kpToIssueSpk = KerjaPraktek::findOrFail($id);
+        // PERBAIKAN: Tambahkan with('mahasiswa') untuk memuat relasi
+        $this->kpToIssueSpk = KerjaPraktek::with('mahasiswa')->findOrFail($id);
+
         $this->reset('tanggalPengambilanSpk');
         Flux::modal('spk-modal')->show();
     }
@@ -111,18 +124,26 @@ new #[Title('Validasi Berkas KP')] #[Layout('components.layouts.app')] class ext
     public function terbitkanSpk()
     {
         $this->validate(['tanggalPengambilanSpk' => 'required|date']);
+
         if ($this->kpToIssueSpk) {
             $this->kpToIssueSpk->update([
                 'status_pengajuan_kp' => 'SPK Terbit',
                 'tanggal_pengambilan_spk' => $this->tanggalPengambilanSpk,
                 'tanggal_disetujui_spk' => now(),
             ]);
+
+            // PERBAIKAN: Pindahkan notifikasi ke sini, SEBELUM reset
+            $this->kpToIssueSpk->mahasiswa->user->notify(new SpkTerbit($this->kpToIssueSpk));
+
             Flux::modal('spk-modal')->close();
             Flux::toast(variant: 'success', heading: 'Berhasil', text: 'SPK telah diterbitkan.');
             $this->dispatch('spk-terbit-dan-download', id: $this->kpToIssueSpk->id);
+
+            // Reset dilakukan di bagian paling akhir
             $this->reset('kpToIssueSpk', 'tanggalPengambilanSpk');
         }
     }
+
 }; ?>
 
 <div x-on:spk-terbit-dan-download.window="window.open('/kerja-praktek/' + $event.detail.id + '/export-spk', '_blank')">

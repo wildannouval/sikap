@@ -14,6 +14,7 @@ use Livewire\WithFileUploads;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use App\Notifications\SeminarDinilai;
 
 new #[Title('Penilaian KP')] #[Layout('components.layouts.app')] class extends Component {
     use WithPagination;
@@ -105,6 +106,7 @@ new #[Title('Penilaian KP')] #[Layout('components.layouts.app')] class extends C
             Flux::modal('grade-modal')->close();
             Flux::toast(variant: 'success', heading: 'Berhasil', text: 'Penilaian seminar telah diperbarui.');
         }
+        $this->seminarToGrade->kerjaPraktek->mahasiswa->user->notify(new SeminarDinilai($this->seminarToGrade));
     }
 
     // Hook BARU untuk reset paginasi
