@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\KerjaPraktekController;
+use App\Http\Controllers\LaporanController;
 use App\Http\Controllers\SeminarController;
 use App\Http\Controllers\SuratPengantarController;
 use Illuminate\Support\Facades\Route;
@@ -43,7 +44,7 @@ Route::middleware(['auth'])->group(function () {
         // Route sementara untuk link lainnya agar tidak error
         Volt::route('/validasi-kp', 'bapendik.kp.validasi')->name('bapendik.pengajuan-kp');
         Volt::route('/penjadwalan-seminar', 'bapendik.seminar.penjadwalan')->name('bapendik.penjadwalan-seminar');
-        Route::get('/laporan', function() { return 'Halaman Laporan'; })->name('bapendik.laporan');
+        Volt::route('/laporan-arsip', 'bapendik.laporan.index')->name('bapendik.laporan');
 
     });
 
@@ -89,6 +90,9 @@ Route::middleware(['auth'])->group(function () {
         ->name('seminar.export-berita-acara');
 
     Volt::route('/notifications', 'notifications.index')->name('notifications.index');
+
+    Route::get('/laporan/export-kp', [LaporanController::class, 'exportKp'])
+        ->name('laporan.export-kp');
 });
 
 require __DIR__.'/auth.php';
