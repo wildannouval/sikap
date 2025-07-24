@@ -9,6 +9,7 @@ use Livewire\Attributes\Url;
 use Livewire\Volt\Component;
 use Livewire\WithPagination;
 use Illuminate\Support\Str;
+use Flux\DateRange;
 
 new #[Title('Laporan & Arsip KP')] #[Layout('components.layouts.app')] class extends Component {
     use WithPagination;
@@ -25,10 +26,20 @@ new #[Title('Laporan & Arsip KP')] #[Layout('components.layouts.app')] class ext
     #[Url]
     public string $sortDirection = 'desc';
 
+    // Ganti startDate dan endDate dengan satu properti DateRange
+    public ?DateRange $dateRange = null; // Jadikan nullable dan beri nilai awal null
+
+//    // Inisialisasi nilai awal untuk properti
+//    public function mount(): void
+//    {
+//        // Membuat objek DateRange baru dengan nilai awal null (tanpa batas)
+//        $this->dateRange = new DateRange(null, null);
+//    }
+
     // Hook untuk reset paginasi
     public function updated($property)
     {
-        if (in_array($property, ['search', 'statusFilter', 'jurusanFilter'])) {
+        if (in_array($property, ['search', 'statusFilter', 'jurusanFilter', 'dateRange'])) {
             $this->resetPage();
         }
     }
@@ -70,6 +81,15 @@ new #[Title('Laporan & Arsip KP')] #[Layout('components.layouts.app')] class ext
             ->when($this->jurusanFilter, function ($query) {
                 $query->whereHas('mahasiswa', fn($q) => $q->where('jurusan_id', $this->jurusanFilter));
             })
+            // Logika BARU untuk filter rentang tanggal menggunakan DateRange
+            ->when($this->dateRange, function ($query) { // Cek apakah $dateRange ada isinya
+                if ($this->dateRange->start() && $this->dateRange->end()) {
+                    $query->whereBetween('tanggal_pengajuan_kp', [
+                        $this->dateRange->start()->startOfDay(),
+                        $this->dateRange->end()->endOfDay()
+                    ]);
+                }
+            })
             ->orderBy($this->sortField, $this->sortDirection)
             ->paginate(10);
     }
@@ -84,7 +104,15 @@ new #[Title('Laporan & Arsip KP')] #[Layout('components.layouts.app')] class ext
         </div>
         <div>
             {{-- Tombol Ekspor akan kita fungsikan nanti --}}
-            <flux:button variant="primary" icon="document-arrow-down" href="{{ route('laporan.export-kp', ['q' => $search, 'statusFilter' => $statusFilter, 'jurusanFilter' => $jurusanFilter]) }}" target="_blank">Ekspor Data</flux:button>
+            <a href="{{ route('laporan.export-kp', [
+                'q' => $search,
+                'statusFilter' => $statusFilter,
+                'jurusanFilter' => $jurusanFilter,
+                'startDate' => $dateRange?->start()?->toDateString(),
+                'endDate' => $dateRange?->end()?->toDateString()
+            ]) }}" target="_blank">
+                <flux:button variant="primary" icon="document-arrow-down">Ekspor Data</flux:button>
+            </a>
         </div>
     </div>
     <flux:separator variant="subtle"/>
@@ -109,6 +137,14 @@ new #[Title('Laporan & Arsip KP')] #[Layout('components.layouts.app')] class ext
                     <option value="Selesai">Selesai</option>
                     <option value="Batal">Batal</option>
                 </flux:select>
+                {{-- GANTI DUA INPUT TANGGAL DENGAN SATU DATE PICKER INI --}}
+                <flux:date-picker
+                    wire:model.live="dateRange"
+                    mode="range"
+                    class="w-full sm:w-64"
+                    with-presets
+                    clearable
+                />
             </div>
         </div>
 

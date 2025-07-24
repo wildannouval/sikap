@@ -182,10 +182,6 @@ new #[Title('Validasi Surat Pengantar')] #[Layout('components.layouts.app')] cla
                     icon="magnifying-glass"
                     class="w-full sm:w-auto"
                 />
-
-                <flux:modal.trigger name="create-pengajuan-surat-pengantar">
-                    <flux:button variant="primary" icon="plus" size="sm">Buat Pengajuan</flux:button>
-                </flux:modal.trigger>
             </div>
         </div>
 

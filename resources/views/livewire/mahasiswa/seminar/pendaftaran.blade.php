@@ -174,6 +174,24 @@ new #[Title('Pendaftaran Seminar')] #[Layout('components.layouts.app')] class ex
         $this->seminarToView = Seminar::findOrFail($id);
         Flux::modal('detail-seminar-modal')->show();
     }
+
+    public function konfirmasiJadwal($id, $setuju)
+    {
+        $seminar = Seminar::findOrFail($id);
+        if ($seminar->kerjaPraktek->mahasiswa_id !== Auth::user()->mahasiswa?->id) {
+            return;
+        }
+
+        if ($setuju) {
+            $seminar->update(['status_seminar' => 'Dijadwalkan']);
+            Flux::toast(variant: 'success', heading: 'Berhasil', text: 'Jadwal seminar telah Anda konfirmasi.');
+            // Kirim notifikasi balik ke Bapendik bahwa jadwal diterima (opsional)
+        } else {
+            $seminar->update(['status_seminar' => 'Ditolak']);
+            Flux::toast(variant: 'danger', heading: 'Jadwal Ditolak', text: 'Anda telah menolak jadwal seminar yang diusulkan.');
+            // Kirim notifikasi balik ke Bapendik bahwa jadwal ditolak (opsional)
+        }
+    }
 }; ?>
 
 <div>
@@ -220,26 +238,34 @@ new #[Title('Pendaftaran Seminar')] #[Layout('components.layouts.app')] class ex
             <flux:heading size="lg">Riwayat Pendaftaran Seminar Anda</flux:heading>
             <flux:card class="mt-4">
                 {{-- Search & Sort BARU --}}
-                <div class="mb-4">
-                    <flux:input wire:model.live.debounce.300ms="search" placeholder="Cari judul seminar..." icon="magnifying-glass" />
+                <div class="flex flex-col sm:flex-row items-center justify-between gap-3 p-4 border-b dark:border-neutral-700">
+                    <div class="flex-1 w-full sm:w-auto">
+                        <flux:input wire:model.live.debounce.300ms="search" placeholder="Cari judul seminar..." icon="magnifying-glass" />
+                    </div>
                 </div>
+
                 <flux:table :paginate="$this->riwayatSeminar">
                     <flux:table.columns>
                         <flux:table.column class="cursor-pointer" wire:click="sortBy('judul_kp_final')">Judul Final</flux:table.column>
-                        <flux:table.column class="cursor-pointer" wire:click="sortBy('tanggal_seminar')">Usulan Jadwal</flux:table.column>
+                        <flux:table.column class="cursor-pointer" wire:click="sortBy('tanggal_seminar')">Jadwal</flux:table.column>
                         <flux:table.column>Status</flux:table.column>
                         <flux:table.column>Keterangan</flux:table.column>
                         <flux:table.column>Aksi</flux:table.column>
                     </flux:table.columns>
                     <flux:table.rows>
+                        {{-- BLOK FORELSE SEKARANG HANYA ADA SATU --}}
                         @forelse ($this->riwayatSeminar as $seminar)
                             <flux:table.row :key="$seminar->id">
                                 <flux:table.cell variant="strong">{{ Str::limit($seminar->judul_kp_final, 40) }}</flux:table.cell>
-                                <flux:table.cell>{{ \Carbon\Carbon::parse($seminar->tanggal_seminar)->format('d/m/Y') }}, {{ \Carbon\Carbon::parse($seminar->jam_mulai)->format('H:i') }}</flux:table.cell>
+                                <flux:table.cell>
+                                    {{ \Carbon\Carbon::parse($seminar->tanggal_seminar)->format('d/m/Y') }}, {{ \Carbon\Carbon::parse($seminar->jam_mulai)->format('H:i') }}
+                                    <span class="block text-xs text-zinc-500">{{ $seminar->ruangan->nama_ruangan }}</span>
+                                </flux:table.cell>
                                 <flux:table.cell>
                                     @php
                                         $color = match($seminar->status_seminar) {
                                             'Diajukan' => 'yellow',
+                                            'Menunggu Konfirmasi' => 'orange',
                                             'Dijadwalkan' => 'blue',
                                             'Selesai' => 'emerald',
                                             'Dinilai' => 'green',
@@ -248,9 +274,11 @@ new #[Title('Pendaftaran Seminar')] #[Layout('components.layouts.app')] class ex
                                         };
                                     @endphp
                                     <flux:badge :color="$color" size="sm">{{ $seminar->status_seminar }}</flux:badge>
+                                    @if($seminar->status_seminar === 'Menunggu Konfirmasi')
+                                        <span class="block text-xs text-yellow-500 italic mt-1">Jadwal diubah Bapendik</span>
+                                    @endif
                                 </flux:table.cell>
                                 <flux:table.cell>
-                                    {{-- Menampilkan Catatan Penolakan BARU --}}
                                     @if ($seminar->status_seminar === 'Ditolak' && $seminar->catatan)
                                         <flux:dropdown position="top" align="start">
                                             <flux:button variant="ghost" size="xs" class="!text-indigo-600 !p-0">Lihat Catatan</flux:button>
@@ -262,16 +290,26 @@ new #[Title('Pendaftaran Seminar')] #[Layout('components.layouts.app')] class ex
                                 </flux:table.cell>
                                 <flux:table.cell>
                                     <div class="flex items-center gap-2">
-                                        {{-- Tombol Detail BARU --}}
                                         <flux:button size="xs" wire:click="showDetail({{ $seminar->id }})">Detail</flux:button>
                                         @if ($seminar->status_seminar === 'Diajukan')
                                             <flux:modal.trigger :name="'delete-seminar-' . $seminar->id">
                                                 <flux:button variant="danger" size="xs">Hapus</flux:button>
                                             </flux:modal.trigger>
-                                        @endif
+                                        @elseif ($seminar->status_seminar === 'Menunggu Konfirmasi')
+                                            <flux:button size="xs" variant="primary" wire:click="konfirmasiJadwal({{ $seminar->id }}, true)">Setujui</flux:button>
+                                        @elseif ($seminar->status_seminar === 'Dijadwalkan')
+                                            <flux:button
+                                                as="a"
+                                                href="{{ route('seminar.export-berita-acara', $seminar->id) }}"
+                                                variant="primary"
+                                                size="xs"
+                                                icon="document-arrow-down">
+                                                Unduh Berita Acara
+                                            </flux:button>                                        @endif
                                     </div>
                                 </flux:table.cell>
                             </flux:table.row>
+
                             {{-- Modal Konfirmasi Hapus --}}
                             @if ($seminar->status_seminar === 'Diajukan')
                                 <flux:modal :name="'delete-seminar-' . $seminar->id" class="md:w-96">
@@ -294,9 +332,7 @@ new #[Title('Pendaftaran Seminar')] #[Layout('components.layouts.app')] class ex
                             @endif
                         @empty
                             <flux:table.row>
-                                <flux:table.cell colspan="4" class="text-center text-neutral-500">
-                                    Anda belum pernah mendaftar seminar.
-                                </flux:table.cell>
+                                <flux:table.cell colspan="5" class="text-center">Anda belum pernah mendaftar seminar.</flux:table.cell>
                             </flux:table.row>
                         @endforelse
                     </flux:table.rows>
@@ -305,9 +341,9 @@ new #[Title('Pendaftaran Seminar')] #[Layout('components.layouts.app')] class ex
         </div>
     @else
         {{-- Tampilan jika tidak ada KP aktif --}}
-        <flux:card class="mt-8 text-center">
-            <p>Anda belum memiliki Kerja Praktik yang aktif.</p>
-        </flux:card>
+        <flux:table.row>
+            <flux:table.cell colspan="5" class="text-center">Anda belum pernah mendaftar seminar.</flux:table.cell>
+        </flux:table.row>
     @endif
 
     {{-- Modal BARU untuk Lihat Detail --}}

@@ -34,7 +34,10 @@ new #[Title('Penjadwalan Seminar')] #[Layout('components.layouts.app')] class ex
     public ?int $ruangan_id = null;
     public string $jam_mulai = '';
     public string $jam_selesai = '';
-    public string $tanggal_pengambilan_berita_acara = '';
+//    public string $tanggal_pengambilan_berita_acara = '';
+
+    // Properti BARU untuk menampung jadwal yang bentrok
+    public $jadwalTerisi = [];
 
     // Hook BARU untuk reset paginasi
     public function updated($property)
@@ -97,7 +100,8 @@ new #[Title('Penjadwalan Seminar')] #[Layout('components.layouts.app')] class ex
         $this->ruangan_id = $this->seminarToProcess->ruangan_id;
         $this->jam_mulai = $this->seminarToProcess->jam_mulai;
         $this->jam_selesai = $this->seminarToProcess->jam_selesai;
-        $this->reset('tanggal_pengambilan_berita_acara');
+//        $this->reset('tanggal_pengambilan_berita_acara');
+        $this->reset('jadwalTerisi');
         Flux::modal('process-seminar-modal')->show();
     }
 
@@ -107,20 +111,75 @@ new #[Title('Penjadwalan Seminar')] #[Layout('components.layouts.app')] class ex
             'tanggal_seminar' => 'required|date',
             'ruangan_id' => 'required|exists:ruangans,id',
             'jam_mulai' => 'required',
-            'jam_selesai' => 'required',
-            'tanggal_pengambilan_berita_acara' => 'required|date',
+            'jam_selesai' => 'required|after:jam_mulai',
+//            'tanggal_pengambilan_berita_acara' => 'required|date',
         ]);
 
+        // --- VALIDASI ANTI-BENTROK BARU ---
+        $isOccupied = Seminar::where('ruangan_id', $validated['ruangan_id'])
+            ->where('tanggal_seminar', $validated['tanggal_seminar'])
+            ->where(function ($query) use ($validated) {
+                $query->where(function ($q) use ($validated) {
+                    // Cek jika jam mulai baru berada di antara jadwal yang sudah ada
+                    $q->where('jam_mulai', '<', $validated['jam_selesai'])
+                        ->where('jam_selesai', '>', $validated['jam_mulai']);
+                });
+            })
+            // Jika sedang mengedit, abaikan jadwal seminar ini sendiri
+            ->when($this->seminarToProcess, function ($query) {
+                $query->where('id', '!=', $this->seminarToProcess->id);
+            })
+            ->exists();
+
+        if ($isOccupied) {
+            // Jika bentrok, tambahkan error dan hentikan proses
+            $this->addError('jadwal_bentrok', 'Ruangan dan waktu yang dipilih sudah terisi oleh seminar lain.');
+            return;
+        }
+
         if ($this->seminarToProcess) {
-            $this->seminarToProcess->update(array_merge($validated, [
-                'status_seminar' => 'Dijadwalkan'
-            ]));
+            $isJadwalDiubah = (
+                $this->seminarToProcess->tanggal_seminar != $this->tanggal_seminar ||
+                $this->seminarToProcess->ruangan_id != $this->ruangan_id ||
+                $this->seminarToProcess->jam_mulai != $this->jam_mulai
+            );
+
+            $newStatus = $isJadwalDiubah ? 'Menunggu Konfirmasi' : 'Dijadwalkan';
+
+            $this->seminarToProcess->update([
+                'tanggal_seminar' => $this->tanggal_seminar,
+                'ruangan_id' => $this->ruangan_id,
+                'jam_mulai' => $this->jam_mulai,
+                'jam_selesai' => $this->jam_selesai,
+//                'tanggal_pengambilan_berita_acara' => $this->tanggal_pengambilan_berita_acara,
+                'status_seminar' => $newStatus
+            ]);
+
+            // Kirim notifikasi yang sesuai
+            // if ($isJadwalDiubah) {
+            //     $this->seminarToProcess->kerjaPraktek->mahasiswa->user->notify(new JadwalSeminarDiubah($this->seminarToProcess));
+            // } else {
+            //     $this->seminarToProcess->kerjaPraktek->mahasiswa->user->notify(new SeminarDijadwalkan($this->seminarToProcess));
+            // }
 
             Flux::modal('process-seminar-modal')->close();
             Flux::toast(variant: 'success', heading: 'Berhasil', text: 'Seminar telah dijadwalkan.');
-            $this->dispatch('seminar-scheduled-and-publish', id: $this->seminarToProcess->id);
+            if (!$isJadwalDiubah) {
+                $this->dispatch('seminar-scheduled-and-publish', id: $this->seminarToProcess->id);
+            }
         }
         $this->seminarToProcess->kerjaPraktek->mahasiswa->user->notify(new SeminarDijadwalkan($this->seminarToProcess));
+    }
+
+    // Tambahkan fungsi BARU ini
+    public function updatedTanggalSeminar($value)
+    {
+        // Ambil semua seminar yang sudah dijadwalkan pada tanggal yang dipilih
+        $this->jadwalTerisi = Seminar::with('ruangan')
+            ->where('status_seminar', 'Dijadwalkan')
+            ->where('tanggal_seminar', $value)
+            ->orderBy('jam_mulai')
+            ->get();
     }
 }; ?>
 
@@ -251,7 +310,7 @@ new #[Title('Penjadwalan Seminar')] #[Layout('components.layouts.app')] class ex
                     <flux:text class="mt-2">Setujui dan tetapkan jadwal final untuk seminar.</flux:text>
                 </div>
 
-                {{-- Detail Usulan Mahasiswa BARU --}}
+                {{-- Detail Usulan Mahasiswa --}}
                 <div class="space-y-2 rounded-lg border bg-neutral-50 p-3 text-sm dark:border-neutral-700 dark:bg-neutral-900">
                     <p><b>Usulan Mahasiswa:</b></p>
                     <p>
@@ -264,7 +323,21 @@ new #[Title('Penjadwalan Seminar')] #[Layout('components.layouts.app')] class ex
 
                 {{-- Form Penjadwalan --}}
                 <div class="space-y-4">
-                    <flux:input wire:model="tanggal_seminar" type="date" label="Tanggal Seminar Final" required />
+                    {{-- Input tanggal sekarang memiliki wire:model.live --}}
+                    <flux:input wire:model.live="tanggal_seminar" type="date" label="Tanggal Seminar Final" required />
+
+                    {{-- ASISTEN JADWAL (BARU) --}}
+                    @if(count($jadwalTerisi) > 0)
+                        <flux:callout type="info" class="text-sm">
+                            <p class="font-bold">Jadwal Terisi pada {{ \Carbon\Carbon::parse($tanggal_seminar)->format('d F Y') }}:</p>
+                            <ul class="list-disc pl-5 mt-1">
+                                @foreach($jadwalTerisi as $jadwal)
+                                    <li>{{ $jadwal->ruangan->nama_ruangan }} ({{ \Carbon\Carbon::parse($jadwal->jam_mulai)->format('H:i') }} - {{ \Carbon\Carbon::parse($jadwal->jam_selesai)->format('H:i') }})</li>
+                                @endforeach
+                            </ul>
+                        </flux:callout>
+                    @endif
+
                     <flux:select wire:model="ruangan_id" label="Ruangan Final" required>
                         <option value="">Pilih Ruangan</option>
                         @foreach($this->ruangans as $ruangan)
@@ -275,9 +348,15 @@ new #[Title('Penjadwalan Seminar')] #[Layout('components.layouts.app')] class ex
                         <flux:input wire:model="jam_mulai" type="time" label="Jam Mulai Final" required />
                         <flux:input wire:model="jam_selesai" type="time" label="Jam Selesai Final" required />
                     </div>
-                    <hr class="dark:border-neutral-700">
-                    <flux:input wire:model="tanggal_pengambilan_berita_acara" type="date" label="Tanggal Pengambilan Berita Acara" required />
+{{--                    <hr class="dark:border-neutral-700">--}}
+{{--                    <flux:input wire:model="tanggal_pengambilan_berita_acara" type="date" label="Tanggal Pengambilan Berita Acara" required />--}}
                 </div>
+                {{-- Tambahkan ini di dalam modal, sebelum div tombol --}}
+                @if ($errors->has('jadwal_bentrok'))
+                    <flux:callout variant="danger" icon="x-circle">
+                        <p>{{ $errors->first('jadwal_bentrok') }}</p>
+                    </flux:callout>
+                @endif
                 <div class="flex justify-end gap-3">
                     <flux:modal.close><flux:button type="button" variant="ghost">Batal</flux:button></flux:modal.close>
                     <flux:button wire:click="scheduleAndPublish" variant="primary">Jadwalkan & Terbitkan Berita Acara</flux:button>

@@ -114,33 +114,31 @@ new #[Title('Validasi Berkas KP')] #[Layout('components.layouts.app')] class ext
 
     public function openSpkModal($id)
     {
-        // PERBAIKAN: Tambahkan with('mahasiswa') untuk memuat relasi
-        $this->kpToIssueSpk = KerjaPraktek::with('mahasiswa')->findOrFail($id);
-
-        $this->reset('tanggalPengambilanSpk');
+        // Sekarang hanya perlu mengisi data KP yang akan diproses
+        $this->kpToIssueSpk = KerjaPraktek::with('mahasiswa', 'dosenPembimbing')->findOrFail($id);
         Flux::modal('spk-modal')->show();
     }
 
     public function terbitkanSpk()
     {
-        $this->validate(['tanggalPengambilanSpk' => 'required|date']);
-
         if ($this->kpToIssueSpk) {
+            // Validasi tanggal sudah tidak diperlukan lagi
             $this->kpToIssueSpk->update([
                 'status_pengajuan_kp' => 'SPK Terbit',
-                'tanggal_pengambilan_spk' => $this->tanggalPengambilanSpk,
                 'tanggal_disetujui_spk' => now(),
+                // 'tanggal_pengambilan_spk' dihapus dari sini
             ]);
 
-            // PERBAIKAN: Pindahkan notifikasi ke sini, SEBELUM reset
+            // Kirim Notifikasi ke Mahasiswa
             $this->kpToIssueSpk->mahasiswa->user->notify(new SpkTerbit($this->kpToIssueSpk));
 
             Flux::modal('spk-modal')->close();
-            Flux::toast(variant: 'success', heading: 'Berhasil', text: 'SPK telah diterbitkan.');
-            $this->dispatch('spk-terbit-dan-download', id: $this->kpToIssueSpk->id);
+            Flux::toast(variant: 'success', heading: 'Berhasil', text: 'SPK telah diterbitkan dan notifikasi telah dikirim ke mahasiswa.');
 
-            // Reset dilakukan di bagian paling akhir
-            $this->reset('kpToIssueSpk', 'tanggalPengambilanSpk');
+            // Kita tidak perlu memicu download untuk Bapendik lagi
+            // $this->dispatch('spk-terbit-dan-download', id: $this->kpToIssueSpk->id);
+
+            $this->reset('kpToIssueSpk');
         }
     }
 
@@ -362,20 +360,22 @@ new #[Title('Validasi Berkas KP')] #[Layout('components.layouts.app')] class ext
 {{--     Modal BARU untuk menerbitkan SPK--}}
     <flux:modal name="spk-modal" class="md:w-96">
         @if ($kpToIssueSpk)
-            <div class="space-y-6">
+            <div class="space-y-6 text-center">
+                <div class="mx-auto flex size-12 items-center justify-center rounded-full bg-green-100">
+                    <flux:icon name="check-circle" class="size-6 text-green-600" />
+                </div>
                 <div>
-                    <flux:heading size="lg">Penerbitan SPK</flux:heading>
+                    <flux:heading size="lg">Terbitkan SPK?</flux:heading>
                     <flux:text class="mt-2">
-                        Input tanggal pengambilan SPK untuk mahasiswa: <span class="font-bold">{{ $kpToIssueSpk->mahasiswa->nama_mahasiswa }}</span>.
+                        Anda akan menerbitkan SPK untuk mahasiswa: <br>
+                        <span class="font-bold">{{ $kpToIssueSpk->mahasiswa->nama_mahasiswa }}</span>.
+                        <br><br>
+                        Mahasiswa akan diberi tahu dan dapat mengunduh SPK. Lanjutkan?
                     </flux:text>
                 </div>
-                <div>
-                    <flux:input type="date" wire:model="tanggalPengambilanSpk" label="Tanggal Pengambilan SPK" required/>
-                    @error('tanggalPengambilanSpk') <span class="mt-1 text-sm text-red-500">{{ $message }}</span> @enderror
-                </div>
-                <div class="flex justify-end gap-3">
-                    <flux:modal.close><flux:button type="button" variant="ghost">Batal</flux:button></flux:modal.close>
-                    <flux:button wire:click="terbitkanSpk" variant="primary">Simpan & Terbitkan</flux:button>
+                <div class="flex justify-center gap-3">
+                    <flux:modal.close><flux:button variant="ghost">Batal</flux:button></flux:modal.close>
+                    <flux:button wire:click="terbitkanSpk" variant="primary">Ya, Terbitkan SPK</flux:button>
                 </div>
             </div>
         @endif

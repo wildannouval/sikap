@@ -6,6 +6,8 @@
         "dev": "vite"
     },
     "dependencies": {
+        "@fullcalendar/core": "^6.1.18",
+        "@fullcalendar/daygrid": "^6.1.18",
         "@tailwindcss/vite": "^4.0.7",
         "autoprefixer": "^10.4.20",
         "axios": "^1.7.4",

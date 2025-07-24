@@ -44,7 +44,7 @@ class SeminarDijadwalkan extends Notification
     public function toArray(object $notifiable): array
     {
         return [
-            'message' => 'Seminar Anda telah dijadwalkan. Berita Acara bisa diambil pada ' . \Carbon\Carbon::parse($this->seminar->tanggal_pengambilan_berita_acara)->format('d F Y') . '.',
+            'message' => 'Seminar Anda telah dijadwalkan. Silakan unduh Berita Acara dari halaman pendaftaran.',
             'url' => route('seminar.pendaftaran'),
             'icon' => 'calendar-check',
         ];

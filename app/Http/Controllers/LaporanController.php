@@ -10,15 +10,16 @@ class LaporanController extends Controller
 {
     public function exportKp(Request $request)
     {
-        // Ambil filter dari URL query
+        // Ambil SEMUA filter dari URL query
         $search = $request->query('q');
         $statusFilter = $request->query('statusFilter');
         $jurusanFilter = $request->query('jurusanFilter');
+        $startDate = $request->query('startDate');
+        $endDate = $request->query('endDate');
 
-        // Generate nama file dinamis
         $fileName = 'Laporan_KP_' . now()->format('Y-m-d') . '.xlsx';
 
-        // Panggil class export dengan membawa filter dan unduh file
-        return Excel::download(new KerjaPraktekExport($search, $statusFilter, $jurusanFilter), $fileName);
+        // Panggil class export dengan membawa SEMUA filter
+        return Excel::download(new KerjaPraktekExport($search, $statusFilter, $jurusanFilter, $startDate, $endDate), $fileName);
     }
 }

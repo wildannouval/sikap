@@ -12,19 +12,7 @@
             </a>
 
             <flux:navlist variant="outline" class="mt-4">
-                <flux:navlist.item
-                    href="{{ route('notifications.index') }}"
-                    icon="bell"
-                    :badge="auth()->user()->unreadNotifications()->count() > 0 ? auth()->user()->unreadNotifications()->count() : ''">
-                    Notifikasi
-                </flux:navlist.item>
-            </flux:navlist>
-
-            <flux:navlist variant="outline">
-                {{-- Tampilkan Menu Sesuai Role --}}
                 @if(auth()->user()->role === 'Mahasiswa')
-
-                    {{-- ================= MENU MAHASISWA ================= --}}
                     <flux:navlist.group :heading="__('Menu Mahasiswa')">
                         <flux:navlist.item icon="home" :href="route('dashboard')" :current="request()->routeIs('dashboard')" wire:navigate>{{ __('Dashboard') }}</flux:navlist.item>
                         <flux:navlist.item icon="envelope" :href="route('surat-pengantar.index')" :current="request()->routeIs('surat-pengantar.*')" wire:navigate>{{ __('Surat Pengantar') }}</flux:navlist.item>
@@ -34,9 +22,9 @@
                         <flux:navlist.item icon="academic-cap" :href="route('kp.nilai')" :current="request()->routeIs('kp.nilai')" wire:navigate>{{ __('Lihat Nilai') }}</flux:navlist.item>
                     </flux:navlist.group>
 
-                @elseif(auth()->user()->role === 'Bapendik')
+                    @include('layouts.partials._menu_lainnya')
 
-                    {{-- ================= MENU BAPENDIK ================= --}}
+                @elseif(auth()->user()->role === 'Bapendik')
                     <flux:navlist.group :heading="__('Menu Bapendik')">
                         <flux:navlist.item icon="home" :href="route('dashboard')" :current="request()->routeIs('dashboard')" wire:navigate>{{ __('Dashboard') }}</flux:navlist.item>
                         <flux:navlist.item icon="envelope-open" :href="route('bapendik.surat-pengantar')" :current="request()->routeIs('bapendik.surat-pengantar.*')" wire:navigate>{{ __('Validasi Surat') }}</flux:navlist.item>
@@ -50,28 +38,32 @@
                         <flux:navlist.item icon="book-open" :href="route('master.jurusan')" :current="request()->routeIs('master.jurusan.*')" wire:navigate>{{ __('Data Jurusan') }}</flux:navlist.item>
                     </flux:navlist.group>
 
-                @elseif(auth()->user()->role === 'Dosen Pembimbing')
+                    @include('layouts.partials._menu_lainnya')
 
-                    {{-- ================= MENU DOSEN PEMBIMBING ================= --}}
-                    <flux:navlist.group :heading="__('Menu Dosen')">
+                @elseif(auth()->user()->role === 'Dosen Pembimbing')
+                    <flux:navlist.group :heading="__('Menu Utama')">
                         <flux:navlist.item icon="home" :href="route('dashboard')" :current="request()->routeIs('dashboard')" wire:navigate>{{ __('Dashboard') }}</flux:navlist.item>
-                        <flux:navlist.item icon="user-group" :href="route('dospem.mahasiswa')" :current="request()->routeIs('dospem.mahasiswa.*')" wire:navigate>{{ __('Mahasiswa Bimbingan') }}</flux:navlist.item>
-                        <flux:navlist.item icon="calendar" :href="route('dospem.jadwal-seminar')" :current="request()->routeIs('dospem.jadwal-seminar.*')" wire:navigate>{{ __('Jadwal Seminar') }}</flux:navlist.item>
-                        <flux:navlist.item icon="clipboard-document-check" :href="route('dospem.penilaian')" :current="request()->routeIs('dospem.penilaian.*')" wire:navigate>{{ __('Penilaian KP') }}</flux:navlist.item>
                     </flux:navlist.group>
+
+                    @include('layouts.partials._dosen_pembimbing_menu')
+                    @include('layouts.partials._menu_lainnya')
 
                 @elseif(auth()->user()->role === 'Dosen Komisi')
-
-                    {{-- ================= MENU DOSEN KOMISI ================= --}}
-                    <flux:navlist.group :heading="__('Menu Komisi')">
+                    <flux:navlist.group :heading="__('Menu Utama')">
                         <flux:navlist.item icon="home" :href="route('dashboard')" :current="request()->routeIs('dashboard')" wire:navigate>{{ __('Dashboard') }}</flux:navlist.item>
-                        <flux:navlist.item icon="user-group" :href="route('doskom.mahasiswa')" :current="request()->routeIs('doskom.mahasiswa.*')" wire:navigate>{{ __('Mahasiswa Bimbingan') }}</flux:navlist.item>
-                        <flux:navlist.item icon="clipboard-document-check" :href="route('doskom.penilaian')" :current="request()->routeIs('doskom.penilaian.*')" wire:navigate>{{ __('Penilaian KP') }}</flux:navlist.item>
-                        <flux:navlist.item icon="document-magnifying-glass" :href="route('doskom.validasi-kp')" :current="request()->routeIs('doskom.validasi-kp.*')" wire:navigate>{{ __('Validasi Pengajuan KP') }}</flux:navlist.item>
-                        <flux:navlist.item icon="archive-box" :href="route('doskom.laporan')" :current="request()->routeIs('doskom.laporan.*')" wire:navigate>{{ __('Laporan & Arsip') }}</flux:navlist.item>
                     </flux:navlist.group>
-                @endif
 
+                    <flux:navlist.group :heading="__('Menu Dosen Komisi')">
+                        <flux:navlist.item icon="document-magnifying-glass" :href="route('doskom.validasi-kp')" :current="request()->routeIs('doskom.validasi-kp.*')" wire:navigate>{{ __('Validasi Pengajuan KP') }}</flux:navlist.item>
+                        {{-- Panggil route bapendik.laporan --}}
+                        <flux:navlist.item icon="archive-box" :href="route('bapendik.laporan')" :current="request()->routeIs('bapendik.laporan.*')" wire:navigate>{{ __('Laporan & Arsip') }}</flux:navlist.item>
+                    </flux:navlist.group>
+
+                    {{-- Panggil partial yang sama dengan Dosen Pembimbing --}}
+                    @include('layouts.partials._dosen_pembimbing_menu')
+                    @include('layouts.partials._menu_lainnya')
+
+                @endif
             </flux:navlist>
 
             <flux:spacer />
@@ -96,6 +88,7 @@
             <flux:dropdown class="hidden lg:block" position="bottom" align="start">
                 <flux:profile
                     :name="auth()->user()->name"
+                    :avatar="auth()->user()->profile_photo_path ? asset('storage/' . auth()->user()->profile_photo_path) : null"
                     :initials="auth()->user()->initials()"
                     icon:trailing="chevrons-up-down"
                 />
@@ -105,11 +98,13 @@
                         <div class="p-0 text-sm font-normal">
                             <div class="flex items-center gap-2 px-1 py-1.5 text-start text-sm">
                                 <span class="relative flex h-8 w-8 shrink-0 overflow-hidden rounded-lg">
-                                    <span
-                                        class="flex h-full w-full items-center justify-center rounded-lg bg-neutral-200 text-black dark:bg-neutral-700 dark:text-white"
-                                    >
-                                        {{ auth()->user()->initials() }}
-                                    </span>
+
+                                        <flux:profile
+                                            :name="auth()->user()->name"
+                                            :avatar="auth()->user()->profile_photo_path ? asset('storage/' . auth()->user()->profile_photo_path) : null"
+                                            :initials="auth()->user()->initials()"
+                                            icon:trailing="chevrons-up-down"
+                                        />
                                 </span>
 
                                 <div class="grid flex-1 text-start text-sm leading-tight">
@@ -146,6 +141,7 @@
 
             <flux:dropdown position="top" align="end">
                 <flux:profile
+                    :avatar="auth()->user()->profile_photo_path ? asset('storage/' . auth()->user()->profile_photo_path) : null"
                     :initials="auth()->user()->initials()"
                     icon-trailing="chevron-down"
                 />
@@ -195,5 +191,6 @@
         @persist('toast')
         <flux:toast />
         @endpersist
+
     </body>
 </html>

@@ -11,17 +11,21 @@ use Maatwebsite\Excel\Concerns\Exportable;
 class KerjaPraktekExport implements FromQuery, WithHeadings, WithMapping
 {
     use Exportable;
+    protected $startDate;
+    protected $endDate;
 
     // Properti untuk menerima filter dari controller
     protected $search;
     protected $statusFilter;
     protected $jurusanFilter;
 
-    public function __construct($search, $statusFilter, $jurusanFilter)
+    public function __construct($search, $statusFilter, $jurusanFilter, $startDate, $endDate)
     {
         $this->search = $search;
         $this->statusFilter = $statusFilter;
         $this->jurusanFilter = $jurusanFilter;
+        $this->startDate = $startDate;
+        $this->endDate = $endDate;
     }
 
     /**
@@ -77,6 +81,16 @@ class KerjaPraktekExport implements FromQuery, WithHeadings, WithMapping
             })
             ->when($this->jurusanFilter, function ($query) {
                 $query->whereHas('mahasiswa', fn($q) => $q->where('jurusan_id', $this->jurusanFilter));
+            })
+            // Tambahkan query filter tanggal di sini juga
+            ->when($this->startDate, function ($query) {
+                $query->whereDate('tanggal_pengajuan_kp', '>=', $this->startDate);
+            })
+            ->when($this->endDate, function ($query) {
+                $query->whereDate('tanggal_pengajuan_kp', '<=', $this->endDate);
+            })
+            ->when($this->startDate && $this->endDate, function ($query) {
+                $query->whereBetween('tanggal_pengajuan_kp', [$this->startDate, $this->endDate]);
             });
     }
 }

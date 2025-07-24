@@ -270,10 +270,24 @@ new #[Title('Pengajuan KP')] #[Layout('components.layouts.app')] class extends C
                             <flux:table.cell>
                                 <div class="flex items-center gap-2">
                                     <flux:button size="xs" wire:click="showDetail({{ $kp->id }})">Detail</flux:button>
+
+                                    {{-- Tombol Hapus hanya muncul jika status 'Diajukan' --}}
                                     @if ($kp->status_pengajuan_kp === 'Diajukan')
                                         <flux:modal.trigger :name="'delete-kp-' . $kp->id">
                                             <flux:button variant="danger" size="xs">Hapus</flux:button>
                                         </flux:modal.trigger>
+                                    @endif
+
+                                    {{-- TOMBOL BARU: Unduh SPK jika statusnya sudah 'SPK Terbit' --}}
+                                    @if ($kp->status_pengajuan_kp === 'SPK Terbit')
+                                        <flux:button
+                                            as="a"
+                                            href="{{ route('kp.export-spk', $kp->id) }}"
+                                            variant="primary"
+                                            size="xs"
+                                            icon="document-arrow-down">
+                                            Unduh SPK
+                                        </flux:button>
                                     @endif
                                 </div>
                             </flux:table.cell>
