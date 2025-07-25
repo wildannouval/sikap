@@ -16,15 +16,19 @@ jobs:
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
           script: |
+            # Pindah ke direktori aplikasi
             cd /var/www/sikap
+
+            # Tarik perubahan terbaru dari branch main
             git pull origin main
 
-            # --- LANGKAH BARU UNTUK MEMPERBAIKI IZIN ---
-            # Memberikan kepemilikan ke user web server (www-data)
-            sudo chown -R www-data:www-data .
-            # Memberikan izin tulis yang benar
+            # --- LANGKAH BARU YANG PALING PENTING ---
+            # Memberikan kepemilikan folder ke user web server (www-data)
+            # dan memberikan izin tulis ke grup.
+            sudo chown -R $USER:www-data .
             sudo chmod -R 775 storage bootstrap/cache
 
+            # Lanjutkan dengan proses instalasi
             composer install --no-dev --optimize-autoloader
             php artisan migrate --force
             php artisan optimize:clear
