@@ -45,24 +45,33 @@ new class extends Component {
         }
 
         DB::transaction(function () use ($user, $validated) {
+            $originalEmail = $user->email;
             $user->update($validated);
 
-            if (array_key_exists('email', $validated) && $user->isDirty('email')) {
-                $user->email_verified_at = null;
-                $user->sendEmailVerificationNotification();
+            // --- PERBAIKAN LOGIKA ADA DI SINI ---
+            // Cek apakah email benar-benar berubah
+            if ($originalEmail !== $validated['email']) {
+                $user->email_verified_at = null; // Set verifikasi menjadi null
+                $user->sendEmailVerificationNotification(); // Kirim email verifikasi baru
             }
+            // --- AKHIR PERBAIKAN ---
+
+//            if (array_key_exists('email', $validated) && $user->isDirty('email')) {
+//                $user->email_verified_at = null;
+//                $user->sendEmailVerificationNotification();
+//            }
 
             if ($user->role === 'Mahasiswa' && $user->mahasiswa) {
                 $user->mahasiswa->update(['nama_mahasiswa' => $validated['name']]);
             } elseif (in_array($user->role, ['Dosen Pembimbing', 'Dosen Komisi']) && $user->dosen) {
                 $user->dosen->update(['nama_dosen' => $validated['name']]);
             }
+
+            $user->save();
         });
 
         $this->dispatch('profile-updated', name: $user->name);
         $this->photo = null;
-
-        // TAMBAHKAN BARIS INI untuk me-refresh halaman
         $this->redirect(route('settings.profile'), navigate: true);
     }
 

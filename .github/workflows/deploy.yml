@@ -18,6 +18,13 @@ jobs:
           script: |
             cd /var/www/sikap
             git pull origin main
+
+            # --- LANGKAH BARU UNTUK MEMPERBAIKI IZIN ---
+            # Memberikan kepemilikan ke user web server (www-data)
+            sudo chown -R www-data:www-data .
+            # Memberikan izin tulis yang benar
+            sudo chmod -R 775 storage bootstrap/cache
+
             composer install --no-dev --optimize-autoloader
             php artisan migrate --force
             php artisan optimize:clear
