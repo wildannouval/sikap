@@ -21,3 +21,9 @@ yarn-error.log
 /.nova
 /.vscode
 /.zed
+
+# Ignore SSH keys
+deploy_key
+deploy_key.pub
+sikap_deploy_key
+sikap_deploy_key.pub
