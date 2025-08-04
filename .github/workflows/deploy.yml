@@ -16,29 +16,23 @@ jobs:
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
           script: |
-            # Pindah ke direktori aplikasi
             cd /var/www/sikap
 
-            # Tarik perubahan terbaru dari branch main
-            git pull origin main
+            # PERBAIKAN: Gunakan fetch dan reset, bukan pull
+            git fetch --all
+            git reset --hard origin/main
 
-            # --- LANGKAH BARU YANG PALING PENTING ---
-            # Memberikan kepemilikan folder ke user web server (www-data)
-            # dan memberikan izin tulis ke grup.
+            # Memberikan izin folder
             sudo chown -R $USER:www-data .
             sudo chmod -R 775 storage bootstrap/cache
 
             # Lanjutkan dengan proses instalasi
             composer install --no-dev --optimize-autoloader
-
-            # HAPUS CACHE LAMA, lalu buat cache baru
+            php artisan migrate --force
             php artisan optimize:clear
             php artisan optimize
-
-            # Jalankan migrasi
-            php artisan migrate --force
-
-            # Build aset frontend
             npm install
             npm run build
+
+            # Restart PHP-FPM untuk memastikan semua cache bersih
             sudo systemctl restart php8.3-fpm
