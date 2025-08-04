@@ -325,26 +325,23 @@ new #[Title('Manajemen Pengguna')] #[Layout('components.layouts.app')] class ext
 
 <div>
     {{-- Header Halaman --}}
-    <div class="flex items-center justify-between">
+    <div class="flex flex-col sm:flex-row items-start sm:items-center sm:justify-between gap-4">
+        {{-- Bagian Judul Halaman --}}
         <div>
             <flux:heading size="xl" level="1">Manajemen Data Pengguna</flux:heading>
-            <flux:subheading size="lg" class="mb-6">Kelola data pengguna mahasiswa dan dosen.</flux:subheading>
+            <flux:subheading size="lg" class="mb-6 sm:mb-0">Kelola data pengguna mahasiswa dan dosen.</flux:subheading>
         </div>
-        <div class="flex items-center gap-2">
-            <flux:button as="a" href="{{ route('master.pengguna.template') }}" variant="primary" icon="document-arrow-down">Unduh Template</flux:button>
+
+        {{-- Grup Tombol Aksi --}}
+        <div class="flex items-center gap-2 w-full sm:w-auto">
+            <flux:button as="a" href="{{ route('master.pengguna.template') }}" variant="secondary" icon="document-arrow-down" class="flex-1 sm:flex-none">Template</flux:button>
             <flux:modal.trigger name="import-modal">
-                <flux:button variant="primary" icon="document-arrow-up">Impor Pengguna</flux:button>
+                <flux:button variant="secondary" icon="document-arrow-up" class="flex-1 sm:flex-none">Impor</flux:button>
             </flux:modal.trigger>
-            <flux:separator vertical class="my-2" />
             <flux:modal.trigger name="user-modal">
-                <flux:button variant="primary" icon="plus">Tambah Pengguna</flux:button>
+                <flux:button variant="primary" icon="plus" class="flex-1 sm:flex-none">Tambah</flux:button>
             </flux:modal.trigger>
         </div>
-{{--        <div>--}}
-{{--            <flux:modal.trigger name="user-modal">--}}
-{{--                <flux:button variant="primary" icon="plus">Tambah Pengguna</flux:button>--}}
-{{--            </flux:modal.trigger>--}}
-{{--        </div>--}}
     </div>
     <flux:separator/>
 
