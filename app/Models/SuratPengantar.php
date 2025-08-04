@@ -26,6 +26,7 @@ class SuratPengantar extends Model
         'catatan_surat',
         'tanggal_disetujui_surat_pengantar',
         'tanggal_pengambilan_surat_pengantar',
+        'nomor_surat'
     ];
 
     /**

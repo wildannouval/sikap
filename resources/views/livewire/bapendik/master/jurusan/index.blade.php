@@ -17,11 +17,22 @@ new #[Title('Manajemen Jurusan')] #[Layout('components.layouts.app')] class exte
     public string $kode_jurusan = '';
     public string $nama_jurusan = '';
 
+    #[Url(as: 'q')]
+    public string $search = '';
+
+    public function updatedSearch()
+    {
+        $this->resetPage();
+    }
+
 
     #[Computed]
     public function jurusans()
     {
-        return Jurusan::orderBy('nama_jurusan')->paginate(10);
+        return Jurusan::where('nama_jurusan', 'like', '%' . $this->search . '%')
+            ->orWhere('kode_jurusan', 'like', '%' . $this->search . '%')
+            ->orderBy('nama_jurusan')
+            ->paginate(10);
     }
 
     /**
@@ -106,11 +117,15 @@ new #[Title('Manajemen Jurusan')] #[Layout('components.layouts.app')] class exte
             <flux:button variant="primary" icon="plus" wire:click="add">Tambah Jurusan</flux:button>
         </div>
     </div>
-    <flux:separator variant="subtle"/>
+    <flux:separator/>
+
+    <div class="py-4 mt-4 dark:border-neutral-700">
+        <flux:input wire:model.live.debounce.300ms="search" placeholder="Cari kode atau nama jurusan..." icon="magnifying-glass" />
+    </div>
 
     {{-- Tabel Daftar Jurusan --}}
-    <flux:card class="mt-8">
-        <flux:table>
+    <flux:card class="mt-4">
+        <flux:table :paginate="$this->jurusans">
             <flux:table.columns>
                 <flux:table.column>Kode Jurusan</flux:table.column>
                 <flux:table.column>Nama Jurusan</flux:table.column>
@@ -159,9 +174,9 @@ new #[Title('Manajemen Jurusan')] #[Layout('components.layouts.app')] class exte
                 @endforelse
             </flux:table.rows>
         </flux:table>
-        <div class="border-t p-4 dark:border-neutral-700">
-            <flux:pagination :paginator="$this->jurusans"/>
-        </div>
+{{--        <div class="border-t p-4 dark:border-neutral-700">--}}
+{{--            <flux:pagination :paginator="$this->jurusans"/>--}}
+{{--        </div>--}}
     </flux:card>
 
     {{-- Modal untuk Tambah/Edit Jurusan --}}

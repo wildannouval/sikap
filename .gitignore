@@ -27,3 +27,5 @@ deploy_key
 deploy_key.pub
 sikap_deploy_key
 sikap_deploy_key.pub
+
+/storage/app/temp

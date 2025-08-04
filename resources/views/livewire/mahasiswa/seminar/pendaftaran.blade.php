@@ -57,17 +57,12 @@ new #[Title('Pendaftaran Seminar')] #[Layout('components.layouts.app')] class ex
         }
 
         if ($this->kerjaPraktek) {
-            // Hitung jumlah bimbingan yang sudah diverifikasi
             $this->jumlahBimbinganTerverifikasi = $this->kerjaPraktek->konsultasis
                 ->where('status_verifikasi', 'Diverifikasi')
                 ->count();
-
-            // Cek apakah mahasiswa memenuhi syarat (minimal 6 bimbingan)
             if ($this->jumlahBimbinganTerverifikasi >= 6) {
                 $this->isEligible = true;
             }
-
-            // Isi judul KP final dengan judul KP yang ada
             $this->judul_kp_final = $this->kerjaPraktek->judul_kp;
         }
     }
@@ -116,29 +111,26 @@ new #[Title('Pendaftaran Seminar')] #[Layout('components.layouts.app')] class ex
      */
     public function save()
     {
-        // Dobel cek kelayakan di sisi server
-        if (!$this->isEligible) {
-            return;
-        }
+        if (!$this->isEligible) return;
 
         $validated = $this->validate([
             'judul_kp_final' => 'required|string|max:255',
             'tanggal_seminar' => 'required|date',
             'ruangan_id' => 'required|exists:ruangans,id',
             'jam_mulai' => 'required',
-            'jam_selesai' => 'required',
-            'berkas_laporan_final' => 'required|file|mimes:pdf|max:5120', // Maks 5MB
+            'jam_selesai' => 'required|after:jam_mulai',
+            'berkas_laporan_final' => 'required|file|mimes:pdf|max:5120',
         ]);
 
         $validated['berkas_laporan_final'] = $this->berkas_laporan_final->store('laporan-final', 'public');
         $validated['kerja_praktek_id'] = $this->kerjaPraktek->id;
 
-        Flux::toast(variant: 'success', heading: 'Berhasil', text: 'Pendaftaran seminar telah terkirim dan akan diverifikasi oleh Bapendik.');
-        $this->reset('tanggal_seminar', 'ruangan_id', 'jam_mulai', 'jam_selesai', 'berkas_laporan_final');
-
         $seminarBaru = Seminar::create($validated);
         $bapendikUsers = User::where('role', 'Bapendik')->get();
         Notification::send($bapendikUsers, new PendaftaranSeminarBaru($seminarBaru));
+
+        Flux::toast(variant: 'success', heading: 'Berhasil', text: 'Pendaftaran seminar telah terkirim.');
+        $this->reset('tanggal_seminar', 'ruangan_id', 'jam_mulai', 'jam_selesai', 'berkas_laporan_final');
     }
 
     /**
@@ -147,21 +139,15 @@ new #[Title('Pendaftaran Seminar')] #[Layout('components.layouts.app')] class ex
     public function deleteSeminar($id)
     {
         $seminar = Seminar::findOrFail($id);
-
-        // Otorisasi sederhana
         if ($seminar->kerjaPraktek->mahasiswa_id !== Auth::user()->mahasiswa?->id) {
             Flux::toast(variant: 'danger', heading: 'Aksi Gagal', text: 'Anda tidak berhak melakukan aksi ini.');
             return;
         }
-
         if ($seminar->status_seminar !== 'Diajukan') {
             Flux::toast(variant: 'danger', heading: 'Aksi Gagal', text: 'Pendaftaran yang sudah diproses tidak dapat dihapus.');
             return;
         }
-
-        // Hapus file laporan dari storage
         Storage::disk('public')->delete($seminar->berkas_laporan_final);
-
         $seminar->delete();
         Flux::toast(variant: 'success', heading: 'Berhasil', text: 'Pendaftaran seminar berhasil dihapus.');
     }
@@ -171,25 +157,21 @@ new #[Title('Pendaftaran Seminar')] #[Layout('components.layouts.app')] class ex
      */
     public function showDetail($id)
     {
-        $this->seminarToView = Seminar::findOrFail($id);
+        $this->seminarToView = Seminar::with('ruangan')->findOrFail($id);
         Flux::modal('detail-seminar-modal')->show();
     }
 
     public function konfirmasiJadwal($id, $setuju)
     {
         $seminar = Seminar::findOrFail($id);
-        if ($seminar->kerjaPraktek->mahasiswa_id !== Auth::user()->mahasiswa?->id) {
-            return;
-        }
+        if ($seminar->kerjaPraktek->mahasiswa_id !== Auth::user()->mahasiswa?->id) return;
 
         if ($setuju) {
             $seminar->update(['status_seminar' => 'Dijadwalkan']);
             Flux::toast(variant: 'success', heading: 'Berhasil', text: 'Jadwal seminar telah Anda konfirmasi.');
-            // Kirim notifikasi balik ke Bapendik bahwa jadwal diterima (opsional)
         } else {
             $seminar->update(['status_seminar' => 'Ditolak']);
-            Flux::toast(variant: 'danger', heading: 'Jadwal Ditolak', text: 'Anda telah menolak jadwal seminar yang diusulkan.');
-            // Kirim notifikasi balik ke Bapendik bahwa jadwal ditolak (opsional)
+            Flux::toast(variant: 'danger', heading: 'Jadwal Ditolak', text: 'Anda telah menolak jadwal yang diusulkan.');
         }
     }
 }; ?>
@@ -198,12 +180,10 @@ new #[Title('Pendaftaran Seminar')] #[Layout('components.layouts.app')] class ex
     <flux:heading size="xl" level="1">Pendaftaran Seminar Kerja Praktik</flux:heading>
 
     @if ($kerjaPraktek)
-        {{-- Cek Kelayakan Mahasiswa --}}
         @if ($isEligible)
             {{-- Tampilan Form Jika Memenuhi Syarat --}}
             <flux:subheading size="lg" class="mb-6">Silakan lengkapi form di bawah untuk mendaftar seminar.</flux:subheading>
             <flux:separator variant="subtle"/>
-
             <flux:card class="mt-8 md:w-2/3">
                 <form wire:submit="save" enctype="multipart/form-data" class="space-y-6">
                     <flux:input wire:model="judul_kp_final" label="Judul Final Kerja Praktik" required />
@@ -231,27 +211,24 @@ new #[Title('Pendaftaran Seminar')] #[Layout('components.layouts.app')] class ex
             <flux:separator variant="subtle" class="my-6"/>
             <flux:callout type="warning" class="mt-8">
                 <p class="font-bold">Anda Belum Memenuhi Syarat Mendaftar Seminar</p>
-                <p class="text-sm">Syarat untuk mendaftar seminar adalah minimal memiliki 6 catatan bimbingan yang telah diverifikasi oleh Dosen Pembimbing. Saat ini Anda memiliki **{{ $this->jumlahBimbinganTerverifikasi }} bimbingan terverifikasi**.</p>
+                <p class="text-sm">Syarat untuk mendaftar seminar adalah minimal memiliki 6 catatan bimbingan yang telah diverifikasi oleh Dosen Pembimbing. Saat ini Anda memiliki <b>{{ $this->jumlahBimbinganTerverifikasi }} bimbingan terverifikasi</b>.</p>
             </flux:callout>
         @endif
-        <div class="mt-8">
-            <flux:heading size="lg">Riwayat Pendaftaran Seminar Anda</flux:heading>
-            <flux:card class="mt-4">
-                {{-- Search & Sort BARU --}}
-                <div class="flex flex-col sm:flex-row items-center justify-between gap-3 p-4 border-b dark:border-neutral-700">
-                    <div class="flex-1 w-full sm:w-auto">
+
+            <div class="mt-8">
+                <flux:heading size="lg">Riwayat Pendaftaran Seminar Anda</flux:heading>
+                <flux:card class="mt-4">
+                    <div class="p-4 border-b dark:border-neutral-700">
                         <flux:input wire:model.live.debounce.300ms="search" placeholder="Cari judul seminar..." icon="magnifying-glass" />
                     </div>
-                </div>
-
-                <flux:table :paginate="$this->riwayatSeminar">
-                    <flux:table.columns>
-                        <flux:table.column class="cursor-pointer" wire:click="sortBy('judul_kp_final')">Judul Final</flux:table.column>
-                        <flux:table.column class="cursor-pointer" wire:click="sortBy('tanggal_seminar')">Jadwal</flux:table.column>
-                        <flux:table.column>Status</flux:table.column>
-                        <flux:table.column>Keterangan</flux:table.column>
-                        <flux:table.column>Aksi</flux:table.column>
-                    </flux:table.columns>
+                    <flux:table :paginate="$this->riwayatSeminar">
+                        <flux:table.columns>
+                            <flux:table.column class="cursor-pointer" wire:click="sortBy('judul_kp_final')">Judul Final</flux:table.column>
+                            <flux:table.column class="cursor-pointer" wire:click="sortBy('tanggal_seminar')">Jadwal</flux:table.column>
+                            <flux:table.column>Status</flux:table.column>
+                            <flux:table.column>Keterangan</flux:table.column>
+                            <flux:table.column>Aksi</flux:table.column>
+                        </flux:table.columns>
                     <flux:table.rows>
                         {{-- BLOK FORELSE SEKARANG HANYA ADA SATU --}}
                         @forelse ($this->riwayatSeminar as $seminar)
@@ -291,21 +268,26 @@ new #[Title('Pendaftaran Seminar')] #[Layout('components.layouts.app')] class ex
                                 <flux:table.cell>
                                     <div class="flex items-center gap-2">
                                         <flux:button size="xs" wire:click="showDetail({{ $seminar->id }})">Detail</flux:button>
+
                                         @if ($seminar->status_seminar === 'Diajukan')
                                             <flux:modal.trigger :name="'delete-seminar-' . $seminar->id">
                                                 <flux:button variant="danger" size="xs">Hapus</flux:button>
                                             </flux:modal.trigger>
                                         @elseif ($seminar->status_seminar === 'Menunggu Konfirmasi')
                                             <flux:button size="xs" variant="primary" wire:click="konfirmasiJadwal({{ $seminar->id }}, true)">Setujui</flux:button>
+
+                                            {{-- TOMBOL BARU DITAMBAHKAN DI SINI --}}
                                         @elseif ($seminar->status_seminar === 'Dijadwalkan')
                                             <flux:button
                                                 as="a"
                                                 href="{{ route('seminar.export-berita-acara', $seminar->id) }}"
+                                                target="_blank"
                                                 variant="primary"
                                                 size="xs"
                                                 icon="document-arrow-down">
                                                 Unduh Berita Acara
-                                            </flux:button>                                        @endif
+                                            </flux:button>
+                                        @endif
                                     </div>
                                 </flux:table.cell>
                             </flux:table.row>
@@ -340,10 +322,16 @@ new #[Title('Pendaftaran Seminar')] #[Layout('components.layouts.app')] class ex
             </flux:card>
         </div>
     @else
-        {{-- Tampilan jika tidak ada KP aktif --}}
-        <flux:table.row>
-            <flux:table.cell colspan="5" class="text-center">Anda belum pernah mendaftar seminar.</flux:table.cell>
-        </flux:table.row>
+        {{-- Tampilan BARU jika tidak ada KP aktif --}}
+        <flux:separator variant="subtle" class="my-6"/>
+        <flux:card class="mt-8 text-center">
+            <flux:icon name="information-circle" class="mx-auto size-12 text-zinc-400" />
+            <p class="mt-4 font-semibold">Kerja Praktik Belum Aktif</p>
+            <p class="text-sm text-zinc-600 dark:text-zinc-400">Anda belum bisa mendaftar seminar karena belum memiliki Kerja Praktik yang statusnya aktif.</p>
+            <flux:button as="a" href="{{ route('kp.pengajuan') }}" variant="primary" size="sm" class="mt-4">
+                Ajukan KP Sekarang
+            </flux:button>
+        </flux:card>
     @endif
 
     {{-- Modal BARU untuk Lihat Detail --}}

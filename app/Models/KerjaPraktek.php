@@ -29,6 +29,7 @@ class KerjaPraktek extends Model
         'tanggal_pengambilan_spk',
         'tanggal_penilaian_kp',
         'nilai_seminar_kp',
+        'nomor_spk',
     ];
 
     public function mahasiswa(): BelongsTo

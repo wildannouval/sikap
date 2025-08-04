@@ -19,7 +19,7 @@ class DosenFactory extends Factory
         return [
             // user_id, jurusan_id, dan nama_dosen akan diisi dari Seeder
             'nip' => fake()->unique()->numerify('198#########'.fake()->numberBetween(1, 9)),
-            'is_komisi' => false, // Defaultnya bukan anggota komisi
+            'is_komisi' => false,
         ];
     }
 }

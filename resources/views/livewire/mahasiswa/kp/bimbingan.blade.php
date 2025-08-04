@@ -12,25 +12,24 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Str;
 use Livewire\WithPagination;
 use App\Notifications\BimbinganBaru;
+use Livewire\WithFileUploads;
 
 new #[Title('Bimbingan KP')] #[Layout('components.layouts.app')] class extends Component {
     use WithPagination;
+    use WithFileUploads;
+
     public ?KerjaPraktek $kerjaPraktek = null;
     public bool $editing = false;
     public ?Konsultasi $konsultasiToEdit = null;
     public string $tanggal_konsultasi = '';
     public string $topik_konsultasi = '';
+
     #[Url(as: 'q')]
     public string $search = '';
     #[Url]
     public string $sortField = 'tanggal_konsultasi';
     #[Url]
     public string $sortDirection = 'desc';
-
-    // Hook untuk reset paginasi
-    public function updatedSearch() {
-        $this->resetPage();
-    }
 
     public function mount()
     {
@@ -39,6 +38,7 @@ new #[Title('Bimbingan KP')] #[Layout('components.layouts.app')] class extends C
             $this->kerjaPraktek = KerjaPraktek::with('dosenPembimbing')
                 ->where('mahasiswa_id', $mahasiswaId)
                 ->where('status_pengajuan_kp', 'SPK Terbit')
+                ->where('status_kp', 'Berlangsung')
                 ->first();
         }
     }
@@ -52,7 +52,11 @@ new #[Title('Bimbingan KP')] #[Layout('components.layouts.app')] class extends C
         return Konsultasi::where('kerja_praktek_id', $this->kerjaPraktek->id)
             ->when($this->search, fn($q) => $q->where('topik_konsultasi', 'like', '%' . $this->search . '%'))
             ->orderBy($this->sortField, $this->sortDirection)
-            ->paginate(5);
+            ->paginate(10);
+    }
+
+    public function updatedSearch() {
+        $this->resetPage();
     }
 
     // Fungsi untuk sorting
@@ -84,9 +88,14 @@ new #[Title('Bimbingan KP')] #[Layout('components.layouts.app')] class extends C
 
     public function save()
     {
+        // PERBAIKAN: Pesan error kustom disesuaikan
         $validated = $this->validate([
             'tanggal_konsultasi' => 'required|date',
             'topik_konsultasi' => 'required|string|min:10',
+        ],[
+            'tanggal_konsultasi.required' => 'Tanggal bimbingan wajib diisi.',
+            'topik_konsultasi.required' => 'Topik pembahasan wajib diisi.',
+            'topik_konsultasi.min' => 'Topik pembahasan minimal harus 10 karakter.',
         ]);
 
         if ($this->editing) {
@@ -100,12 +109,14 @@ new #[Title('Bimbingan KP')] #[Layout('components.layouts.app')] class extends C
                 'tanggal_konsultasi' => $validated['tanggal_konsultasi'],
                 'topik_konsultasi' => $validated['topik_konsultasi'],
             ]);
+
+            // PERBAIKAN: Pindahkan notifikasi ke dalam scope yang benar
+            $this->kerjaPraktek->dosenPembimbing->user->notify(new BimbinganBaru($konsultasiBaru));
             Flux::toast(variant: 'success', heading: 'Berhasil', text: 'Catatan bimbingan berhasil disimpan.');
         }
 
         Flux::modal('bimbingan-modal')->close();
         $this->resetForm();
-        $this->kerjaPraktek->dosenPembimbing->user->notify(new BimbinganBaru($konsultasiBaru));
     }
 
     /**
@@ -156,14 +167,9 @@ new #[Title('Bimbingan KP')] #[Layout('components.layouts.app')] class extends C
             </div>
         </flux:card>
 
-        {{-- Form Tambah Catatan Bimbingan --}}
+        {{-- Tabel Riwayat Bimbingan --}}
         <div class="mt-8">
-{{--            <div class="flex items-center justify-between">--}}
-{{--                <flux:heading size="lg">Riwayat Bimbingan</flux:heading>--}}
-{{--                <flux:button variant="primary" size="sm" icon="plus" wire:click="openAddModal">Tambah Catatan</flux:button>--}}
-{{--            </div>--}}
             <flux:card>
-                {{-- Header Card dengan tombol Tambah --}}
                 <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 p-4 border-b dark:border-neutral-700">
                     <div>
                         <flux:heading size="lg">Riwayat Bimbingan</flux:heading>
@@ -173,10 +179,6 @@ new #[Title('Bimbingan KP')] #[Layout('components.layouts.app')] class extends C
                         <flux:button variant="primary" icon="plus" wire:click="openAddModal" class="whitespace-nowrap">Tambah Catatan</flux:button>
                     </div>
                 </div>
-                {{-- Search & Filter --}}
-{{--                <div class="mb-4">--}}
-{{--                    <flux:input wire:model.live.debounce.300ms="search" placeholder="Cari topik bimbingan..." icon="magnifying-glass" />--}}
-{{--                </div>--}}
                 <flux:table :paginate="$this->konsultasis">
                     <flux:table.columns>
                         <flux:table.column class="cursor-pointer" wire:click="sortBy('tanggal_konsultasi')">Tanggal</flux:table.column>
@@ -191,31 +193,48 @@ new #[Title('Bimbingan KP')] #[Layout('components.layouts.app')] class extends C
                                 <flux:table.cell>{{ \Carbon\Carbon::parse($konsultasi->tanggal_konsultasi)->format('d/m/Y') }}</flux:table.cell>
                                 <flux:table.cell>{{ Str::limit($konsultasi->topik_konsultasi, 50) }}</flux:table.cell>
                                 <flux:table.cell>
-                                    {{-- ... badge status tidak berubah ... --}}
+                                    @php
+                                        $color = match($konsultasi->status_verifikasi) {
+                                            'Menunggu Verifikasi' => 'yellow', 'Diverifikasi' => 'green', 'Revisi' => 'red', default => 'zinc',
+                                        };
+                                    @endphp
+                                    <flux:badge :color="$color" size="sm">{{ $konsultasi->status_verifikasi }}</flux:badge>
                                 </flux:table.cell>
                                 <flux:table.cell>
-                                    {{-- PENYEMPURNAAN 2: Popover Catatan Revisi --}}
                                     @if ($konsultasi->status_verifikasi === 'Revisi' && $konsultasi->catatan_konsultasi)
                                         <flux:dropdown position="top" align="start">
                                             <flux:button variant="ghost" size="xs" class="!text-indigo-600 !p-0">Lihat Catatan</flux:button>
                                             <flux:popover class="max-w-xs p-3 text-sm">{{ $konsultasi->catatan_konsultasi }}</flux:popover>
                                         </flux:dropdown>
-                                    @else
-                                        -
-                                    @endif
+                                    @else - @endif
                                 </flux:table.cell>
                                 <flux:table.cell>
                                     @if ($konsultasi->status_verifikasi === 'Menunggu Verifikasi')
                                         <div class="flex items-center gap-2">
-                                            {{-- PENYEMPURNAAN 1: Tombol Edit --}}
                                             <flux:button size="xs" wire:click="openEditModal({{ $konsultasi->id }})">Edit</flux:button>
-                                            <flux:button variant="danger" size="xs" wire:click="delete({{ $konsultasi->id }})" wire:confirm="Yakin ingin menghapus catatan bimbingan ini?">Hapus</flux:button>
+                                            <flux:modal.trigger :name="'delete-bimbingan-' . $konsultasi->id">
+                                                <flux:button variant="danger" size="xs">Hapus</flux:button>
+                                            </flux:modal.trigger>
                                         </div>
-                                    @else
-                                        -
-                                    @endif
+                                    @else - @endif
                                 </flux:table.cell>
                             </flux:table.row>
+
+                            @if ($konsultasi->status_verifikasi === 'Menunggu Verifikasi')
+                                <flux:modal :name="'delete-bimbingan-' . $konsultasi->id" class="md:w-96">
+                                    <div class="space-y-6 text-center">
+                                        <flux:icon name="trash" class="mx-auto size-10 text-danger" />
+                                        <div>
+                                            <flux:heading size="lg">Hapus Catatan Bimbingan?</flux:heading>
+                                            <flux:text class="mt-2">Anda yakin ingin menghapus catatan bimbingan tanggal {{ \Carbon\Carbon::parse($konsultasi->tanggal_konsultasi)->format('d F Y') }}?</flux:text>
+                                        </div>
+                                        <div class="flex justify-center gap-3">
+                                            <flux:modal.close><flux:button variant="ghost">Batal</flux:button></flux:modal.close>
+                                            <flux:button variant="danger" wire:click="delete({{ $konsultasi->id }})">Ya, Hapus</flux:button>
+                                        </div>
+                                    </div>
+                                </flux:modal>
+                            @endif
                         @empty
                             <flux:table.row><flux:table.cell colspan="5" class="text-center">Belum ada catatan bimbingan.</flux:table.cell></flux:table.row>
                         @endforelse
@@ -224,11 +243,15 @@ new #[Title('Bimbingan KP')] #[Layout('components.layouts.app')] class extends C
             </flux:card>
         </div>
     @else
-        {{-- Tampilan jika tidak ada KP aktif --}}
+        {{-- Tampilan BARU jika tidak ada KP aktif --}}
+        <flux:separator variant="subtle" class="my-6"/>
         <flux:card class="mt-8 text-center">
             <flux:icon name="information-circle" class="mx-auto size-12 text-zinc-400" />
             <p class="mt-4 font-semibold">Kerja Praktik Belum Aktif</p>
-            <p class="text-sm text-zinc-600 dark:text-zinc-400">Anda belum bisa mengisi logbook karena pengajuan KP Anda belum disetujui atau dosen pembimbing belum ditugaskan.</p>
+            <p class="text-sm text-zinc-600 dark:text-zinc-400">Anda belum bisa mengisi logbook karena SPK belum terbit.</p>
+            <flux:button as="a" href="{{ route('kp.pengajuan') }}" variant="primary" size="sm" class="mt-4">
+                Lihat Status Pengajuan KP
+            </flux:button>
         </flux:card>
     @endif
 
@@ -238,7 +261,7 @@ new #[Title('Bimbingan KP')] #[Layout('components.layouts.app')] class extends C
             <div><flux:heading size="lg">{{ $editing ? 'Edit' : 'Tambah' }} Catatan Bimbingan</flux:heading></div>
             <div class="space-y-4">
                 <flux:input wire:model="tanggal_konsultasi" type="date" label="Tanggal Bimbingan" required />
-                <flux:textarea wire:model="topik_konsultasi" label="Topik / Pembahasan Bimbingan" placeholder="Jelaskan apa saja yang Anda diskusikan..." required />
+                <flux:textarea wire:model="topik_konsultasi" label="Topik / Pembahasan Bimbingan" placeholder="Jelaskan apa saja yang Anda diskusikan..." rows="5" required />
             </div>
             <div class="flex justify-end gap-3">
                 <flux:modal.close><flux:button type="button" variant="ghost">Batal</flux:button></flux:modal.close>

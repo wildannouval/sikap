@@ -19,7 +19,7 @@ class MahasiswaFactory extends Factory
         return [
             // user_id, jurusan_id, dan nama_mahasiswa akan diisi dari Seeder
             'nim' => 'G1A0' . fake()->unique()->numerify('#####'),
-            'tahun_angkatan' => fake()->numberBetween(2019, 2022),
+            'tahun_angkatan' => fake()->numberBetween(2020, 2022),
         ];
     }
 }

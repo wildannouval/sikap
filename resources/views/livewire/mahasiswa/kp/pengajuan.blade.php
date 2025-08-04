@@ -223,7 +223,7 @@ new #[Title('Pengajuan KP')] #[Layout('components.layouts.app')] class extends C
                     <flux:table.column>Tgl. Pengajuan</flux:table.column>
                     <flux:table.column>Tgl. Pengambilan SPK</flux:table.column> {{-- KOLOM BARU --}}
                     <flux:table.column>Dosen Pembimbing</flux:table.column>
-                    <flux:table.column>Status</flux:table.column>
+                    <flux:table.column>Status Pengajuan KP</flux:table.column>
                     <flux:table.column>Keterangan</flux:table.column> {{-- KOLOM BARU --}}
                     <flux:table.column>Aksi</flux:table.column>
                 </flux:table.columns>
@@ -243,7 +243,7 @@ new #[Title('Pengajuan KP')] #[Layout('components.layouts.app')] class extends C
                                     $color = match($kp->status_pengajuan_kp) {
                                         'Diajukan' => 'yellow',
                                         'Proses di Komisi' => 'blue',
-                                        'Disetujui' => 'sky',
+                                        'Disetujui Komisi' => 'sky',
                                         'SPK Terbit' => 'green',
                                         'Ditolak' => 'red',
                                         default => 'zinc',

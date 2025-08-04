@@ -3,37 +3,57 @@
 namespace App\Http\Controllers;
 
 use App\Models\Seminar;
-use PhpOffice\PhpWord\PhpWord;
-use PhpOffice\PhpWord\IOFactory;
+use Illuminate\Support\Facades\Storage;
+use PhpOffice\PhpWord\TemplateProcessor;
 
 class SeminarController extends Controller
 {
     public function exportBeritaAcara($id)
     {
-        $seminar = Seminar::with(['kerjaPraktek.mahasiswa'])->findOrFail($id);
-        $phpWord = new PhpWord();
-        $section = $phpWord->addSection();
+        // 1. Ambil data seminar dari database beserta relasi yang dibutuhkan
+        $seminar = Seminar::with([
+            'kerjaPraktek.mahasiswa.jurusan',
+            'kerjaPraktek.dosenPembimbing',
+            'ruangan'
+        ])->findOrFail($id);
 
-        // Contoh sederhana konten Berita Acara
-        $section->addText('BERITA ACARA SEMINAR KERJA PRAKTEK', ['bold' => true, 'size' => 14], ['alignment' => 'center']);
-        $section->addTextBreak(2);
-        $section->addText("Telah dilaksanakan Seminar Kerja Praktik atas nama:");
-        $section->addText("Nama: " . $seminar->kerjaPraktek->mahasiswa->nama_mahasiswa);
-        $section->addText("NIM: " . $seminar->kerjaPraktek->mahasiswa->nim);
-        $section->addTextBreak(1);
-        $section->addText("Judul: " . $seminar->judul_kp_final);
-        $section->addText("Tanggal: " . \Carbon\Carbon::parse($seminar->tanggal_seminar)->format('d F Y'));
-        $section->addText("Waktu: " . $seminar->jam_mulai . " - " . $seminar->jam_selesai);
-        $section->addText("Tempat: " . $seminar->ruangan->nama_ruangan);
-        $section->addTextBreak(4);
-        $section->addText('Tanda Tangan Dosen Pembimbing,', null, ['alignment' => 'right']);
+        // Path ke file template Anda
+        $templatePath = storage_path('app/templates/TEMPLATE_BERITA_ACARA.docx');
 
-        // Simpan dan paksa unduh file
-        $filename = 'Berita_Acara_' . $seminar->kerjaPraktek->mahasiswa->nim . '.docx';
-        header('Content-Type: application/octet-stream');
-        header('Content-Disposition: attachment;filename="' . $filename . '"');
-        $objWriter = IOFactory::createWriter($phpWord, 'Word2007');
-        $objWriter->save('php://output');
-        exit;
+        if (!file_exists($templatePath)) {
+            abort(404, 'Template Berita Acara tidak ditemukan.');
+        }
+
+        $templateProcessor = new TemplateProcessor($templatePath);
+
+        // 2. Siapkan data untuk mengisi placeholder
+        $mahasiswa = $seminar->kerjaPraktek->mahasiswa;
+        $dosen = $seminar->kerjaPraktek->dosenPembimbing;
+        $waktu_seminar = \Carbon\Carbon::parse($seminar->jam_mulai)->format('H:i') . ' - ' . \Carbon\Carbon::parse($seminar->jam_selesai)->format('H:i');
+
+        // 3. Ganti semua placeholder dengan data dari database
+        $templateProcessor->setValue('nama_mahasiswa', $mahasiswa->nama_mahasiswa);
+        $templateProcessor->setValue('nim_mahasiswa', $mahasiswa->nim);
+        $templateProcessor->setValue('jurusan_mahasiswa', $mahasiswa->jurusan->nama_jurusan);
+        $templateProcessor->setValue('judul_kerja_praktik_mahasiswa', $seminar->judul_kp_final);
+        $templateProcessor->setValue('nama_dosen_pembimbing', $dosen->nama_dosen ?? '-');
+        $templateProcessor->setValue('nip_dosen_pembimbing', $dosen->nip ?? '-');
+        $templateProcessor->setValue('tanggal_seminar', \Carbon\Carbon::parse($seminar->tanggal_seminar)->translatedFormat('l, d F Y'));
+        $templateProcessor->setValue('waktu_seminar', $waktu_seminar);
+        $templateProcessor->setValue('ruang_seminar', $seminar->ruangan->nama_ruangan);
+        $templateProcessor->setValue('tanggal_berita_acara', now()->translatedFormat('d F Y'));
+
+
+        // 4. Siapkan nama file untuk diunduh dan simpan sementara
+        $tempDirectory = 'temp';
+        if (!Storage::disk('local')->exists($tempDirectory)) {
+            Storage::disk('local')->makeDirectory($tempDirectory);
+        }
+        $filename = 'Berita_Acara_Seminar_' . $mahasiswa->nim . '.docx';
+        $tempPath = storage_path('app/' . $tempDirectory . DIRECTORY_SEPARATOR . $filename);
+        $templateProcessor->saveAs($tempPath);
+
+        // 5. Unduh file lalu hapus dari server
+        return response()->download($tempPath)->deleteFileAfterSend(true);
     }
 }

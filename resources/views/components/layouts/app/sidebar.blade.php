@@ -25,17 +25,19 @@
                     @include('layouts.partials._menu_lainnya')
 
                 @elseif(auth()->user()->role === 'Bapendik')
+                    {{-- Ganti seluruh grup menu Bapendik Anda --}}
                     <flux:navlist.group :heading="__('Menu Bapendik')">
-                        <flux:navlist.item icon="home" :href="route('dashboard')" :current="request()->routeIs('dashboard')" wire:navigate>{{ __('Dashboard') }}</flux:navlist.item>
-                        <flux:navlist.item icon="envelope-open" :href="route('bapendik.surat-pengantar')" :current="request()->routeIs('bapendik.surat-pengantar.*')" wire:navigate>{{ __('Validasi Surat') }}</flux:navlist.item>
-                        <flux:navlist.item icon="document-check" :href="route('bapendik.pengajuan-kp')" :current="request()->routeIs('bapendik.pengajuan-kp.*')" wire:navigate>{{ __('Validasi KP') }}</flux:navlist.item>
-                        <flux:navlist.item icon="calendar" :href="route('bapendik.penjadwalan-seminar')" :current="request()->routeIs('bapendik.penjadwalan-seminar.*')" wire:navigate>{{ __('Penjadwalan Seminar') }}</flux:navlist.item>
-                        <flux:navlist.item icon="archive-box" :href="route('bapendik.laporan')" :current="request()->routeIs('bapendik.laporan.*')" wire:navigate>{{ __('Laporan & Arsip') }}</flux:navlist.item>
+                        <flux:navlist.item icon="home" :href="route('dashboard')" :current="request()->routeIs('dashboard')" wire:navigate>{{ __('Dashboard') }}</flux:navlist.item>                        {{-- PERBAIKAN: Ganti '.*' menjadi '*' --}}
+                        <flux:navlist.item icon="envelope-open" :href="route('bapendik.surat-pengantar')" :current="request()->routeIs('bapendik.surat-pengantar*')" wire:navigate>{{ __('Validasi Surat Pengantar') }}</flux:navlist.item>
+                        <flux:navlist.item icon="document-check" :href="route('bapendik.pengajuan-kp')" :current="request()->routeIs('bapendik.pengajuan-kp*')" wire:navigate>{{ __('Validasi Kerja Praktek') }}</flux:navlist.item>
+                        <flux:navlist.item icon="calendar" :href="route('bapendik.penjadwalan-seminar')" :current="request()->routeIs('bapendik.penjadwalan-seminar*')" wire:navigate>{{ __('Penjadwalan Seminar') }}</flux:navlist.item>
+                        <flux:navlist.item icon="archive-box" :href="route('bapendik.laporan')" :current="request()->routeIs('bapendik.laporan*')" wire:navigate>{{ __('Laporan & Arsip') }}</flux:navlist.item>
                     </flux:navlist.group>
                     <flux:navlist.group :heading="__('Data Master')">
-                        <flux:navlist.item icon="users" :href="route('master.pengguna')" :current="request()->routeIs('master.pengguna.*')" wire:navigate>{{ __('Data Pengguna') }}</flux:navlist.item>
-                        <flux:navlist.item icon="building-office" :href="route('master.ruangan')" :current="request()->routeIs('master.ruangan.*')" wire:navigate>{{ __('Data Ruangan') }}</flux:navlist.item>
-                        <flux:navlist.item icon="book-open" :href="route('master.jurusan')" :current="request()->routeIs('master.jurusan.*')" wire:navigate>{{ __('Data Jurusan') }}</flux:navlist.item>
+                        {{-- PERBAIKAN: Gunakan wildcard (*) agar lebih fleksibel --}}
+                        <flux:navlist.item icon="users" :href="route('master.pengguna')" :current="request()->routeIs('master.pengguna*')" wire:navigate>{{ __('Data Pengguna') }}</flux:navlist.item>
+                        <flux:navlist.item icon="building-office" :href="route('master.ruangan')" :current="request()->routeIs('master.ruangan*')" wire:navigate>{{ __('Data Ruangan') }}</flux:navlist.item>
+                        <flux:navlist.item icon="book-open" :href="route('master.jurusan')" :current="request()->routeIs('master.jurusan*')" wire:navigate>{{ __('Data Jurusan') }}</flux:navlist.item>
                     </flux:navlist.group>
 
                     @include('layouts.partials._menu_lainnya')
@@ -54,9 +56,10 @@
                     </flux:navlist.group>
 
                     <flux:navlist.group :heading="__('Menu Dosen Komisi')">
-                        <flux:navlist.item icon="document-magnifying-glass" :href="route('doskom.validasi-kp')" :current="request()->routeIs('doskom.validasi-kp.*')" wire:navigate>{{ __('Validasi Pengajuan KP') }}</flux:navlist.item>
-                        {{-- Panggil route bapendik.laporan --}}
-                        <flux:navlist.item icon="archive-box" :href="route('bapendik.laporan')" :current="request()->routeIs('bapendik.laporan.*')" wire:navigate>{{ __('Laporan & Arsip') }}</flux:navlist.item>
+                        {{-- PERBAIKAN: Gunakan wildcard (*) agar lebih fleksibel --}}
+{{--                        <flux:navlist.item icon="document-magnifying-glass" :href="route('doskom.validasi-kp')" :current="request()->routeIs('doskom.validasi-kp*')" wire:navigate>{{ __('Validasi Pengajuan KP') }}</flux:navlist.item>--}}
+{{--                        <flux:navlist.item icon="archive-box" :href="route('bapendik.laporan')" :current="request()->routeIs('bapendik.laporan*')" wire:navigate>{{ __('Laporan & Arsip') }}</flux:navlist.item>--}}
+                        <flux:navlist.item icon="document-magnifying-glass" :href="route('doskom.validasi-kp')" :current="request()->routeIs('doskom.validasi-kp*')" wire:navigate>{{ __('Validasi Pengajuan KP') }}</flux:navlist.item>
                     </flux:navlist.group>
 
                     {{-- Panggil partial yang sama dengan Dosen Pembimbing --}}

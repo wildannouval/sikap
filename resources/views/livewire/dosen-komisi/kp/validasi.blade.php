@@ -140,7 +140,7 @@ new #[Title('Validasi Proposal KP')] #[Layout('components.layouts.app')] class e
             $bapendikUsers = User::where('role', 'Bapendik')->get();
             Notification::send($bapendikUsers, new KpDisetujui($this->kpToProcess));
 
-            Flux::modal('approve-confirm-modal')->close();
+            Flux::modal('approve-confirm-modal-' . $this->kpToProcess->id)->close();
             Flux::modal('process-modal')->close();
             Flux::toast(variant: 'success', heading: 'Berhasil', text: 'Pengajuan KP telah disetujui dan pembimbing telah ditugaskan.');
         }

@@ -84,7 +84,9 @@ new #[Title('Detail Bimbingan')] #[Layout('components.layouts.app')] class exten
     {
         if (!in_array($newStatus, ['Diverifikasi', 'Revisi'])) { return; }
         if ($newStatus === 'Revisi') {
-            $this->validate(['catatan_dosen' => 'required|string|min:5']);
+            $this->validate(['catatan_dosen' => 'required|string|min:5'],[
+                'catatan_dosen.required' => 'Catatan wajib diisi.'
+            ]);
         }
         if ($this->konsultasiToProcess) {
             $this->konsultasiToProcess->update([
@@ -223,7 +225,6 @@ new #[Title('Detail Bimbingan')] #[Layout('components.layouts.app')] class exten
                 </div>
                 <div>
                     <flux:textarea wire:model="catatan_dosen" label="Catatan / Feedback Anda (Wajib diisi jika revisi)" />
-                    @error('catatan_dosen') <span class="mt-1 text-sm text-red-500">{{ $message }}</span> @enderror
                 </div>
                 <div class="flex justify-end gap-3">
                     <flux:modal.close><flux:button type="button" variant="ghost">Tutup</flux:button></flux:modal.close>

@@ -186,7 +186,7 @@ new #[Title('Penjadwalan Seminar')] #[Layout('components.layouts.app')] class ex
 <div x-on:seminar-scheduled-and-publish.window="window.open('/seminar/' + $event.detail.id + '/export-berita-acara', '_blank')">
     <flux:heading size="xl" level="1">Penjadwalan Seminar</flux:heading>
     <flux:subheading size="lg" class="mb-6">Validasi pendaftaran dan jadwalkan seminar mahasiswa.</flux:subheading>
-    <flux:separator variant="subtle"/>
+    <flux:separator/>
 
     {{-- Input Search & Filter BARU --}}
     <div class="mt-6 flex flex-col md:flex-row gap-4">

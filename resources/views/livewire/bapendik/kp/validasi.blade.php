@@ -14,14 +14,13 @@ use App\Models\User;
 use App\Notifications\KpDiteruskanKeKomisi;
 use Illuminate\Support\Facades\Notification;
 use App\Notifications\SpkTerbit;
-use App\Notifications\KpDitolakKomisi;
-
 
 new #[Title('Validasi Berkas KP')] #[Layout('components.layouts.app')] class extends Component {
     use WithPagination;
 
 // Properti untuk mengontrol tab yang aktif
     public string $tab = 'administrasi';
+    public string $nomor_spk = '';
 
     // Properti BARU untuk Search, Filter, Sort
     #[Url(as: 'q')]
@@ -35,7 +34,6 @@ new #[Title('Validasi Berkas KP')] #[Layout('components.layouts.app')] class ext
 
     // Properti untuk Modal (dirapikan)
     public ?KerjaPraktek $kpToIssueSpk = null;
-    public string $tanggalPengambilanSpk = '';
 
     // Hook dan fungsi-fungsi
     public function updated($property)
@@ -94,13 +92,15 @@ new #[Title('Validasi Berkas KP')] #[Layout('components.layouts.app')] class ext
 
     public function forwardToKomisi($id)
     {
-        KerjaPraktek::findOrFail($id)->update(['status_pengajuan_kp' => 'Proses di Komisi']);
-        Flux::toast(variant: 'success', heading: 'Berhasil', text: 'Pengajuan KP telah diteruskan ke Komisi.');
-
+        // PERBAIKAN: Hapus duplikasi, cukup panggil findOrFail sekali
         $kp = KerjaPraktek::findOrFail($id);
         $kp->update(['status_pengajuan_kp' => 'Proses di Komisi']);
+
         $komisiUsers = User::where('role', 'Dosen Komisi')->get();
         Notification::send($komisiUsers, new KpDiteruskanKeKomisi($kp));
+
+        Flux::modal('forward-kp-'.$id)->close();
+        Flux::toast(variant: 'success', heading: 'Berhasil', text: 'Pengajuan KP telah diteruskan ke Komisi.');
     }
 
     public function reject($id)
@@ -109,36 +109,40 @@ new #[Title('Validasi Berkas KP')] #[Layout('components.layouts.app')] class ext
             'status_pengajuan_kp' => 'Ditolak',
             'catatan_kp' => 'Berkas administrasi tidak lengkap atau tidak sesuai. Silakan ajukan ulang.'
         ]);
+        Flux::modal('reject-kp-' . $id)->close();
         Flux::toast(variant: 'success', heading: 'Berhasil', text: 'Pengajuan KP telah ditolak.');
     }
 
     public function openSpkModal($id)
     {
-        // Sekarang hanya perlu mengisi data KP yang akan diproses
-        $this->kpToIssueSpk = KerjaPraktek::with('mahasiswa', 'dosenPembimbing')->findOrFail($id);
+        $this->kpToIssueSpk = KerjaPraktek::with('mahasiswa')->findOrFail($id);
+        $this->reset('nomor_spk');
         Flux::modal('spk-modal')->show();
     }
 
     public function terbitkanSpk()
     {
+        $this->validate(['nomor_spk' => 'required|string|max:255']);
+
         if ($this->kpToIssueSpk) {
-            // Validasi tanggal sudah tidak diperlukan lagi
             $this->kpToIssueSpk->update([
                 'status_pengajuan_kp' => 'SPK Terbit',
                 'tanggal_disetujui_spk' => now(),
-                // 'tanggal_pengambilan_spk' dihapus dari sini
+                'nomor_spk' => $this->nomor_spk,
+                'status_kp' => 'Berlangsung', // PERBAIKAN: Set status_kp menjadi Berlangsung
             ]);
 
-            // Kirim Notifikasi ke Mahasiswa
+            // PERBAIKAN: Pindahkan notifikasi ke sini, SEBELUM reset
             $this->kpToIssueSpk->mahasiswa->user->notify(new SpkTerbit($this->kpToIssueSpk));
 
             Flux::modal('spk-modal')->close();
-            Flux::toast(variant: 'success', heading: 'Berhasil', text: 'SPK telah diterbitkan dan notifikasi telah dikirim ke mahasiswa.');
+            Flux::toast(variant: 'success', heading: 'Berhasil', text: 'SPK telah diterbitkan.');
 
-            // Kita tidak perlu memicu download untuk Bapendik lagi
+            // Hapus dispatch event untuk download
             // $this->dispatch('spk-terbit-dan-download', id: $this->kpToIssueSpk->id);
 
-            $this->reset('kpToIssueSpk');
+            // Reset dilakukan di bagian paling akhir
+            $this->reset('kpToIssueSpk', 'nomor_spk');
         }
     }
 
@@ -152,7 +156,7 @@ new #[Title('Validasi Berkas KP')] #[Layout('components.layouts.app')] class ext
             <flux:subheading size="lg" class="mb-6">Review kelengkapan administrasi pengajuan KP dari mahasiswa.</flux:subheading>
         </div>
     </div>
-    <flux:separator variant="subtle"/>
+    <flux:separator/>
 
     {{-- Input Search & Filter --}}
     <div class="mt-6 flex flex-col md:flex-row gap-4">
@@ -306,7 +310,7 @@ new #[Title('Validasi Berkas KP')] #[Layout('components.layouts.app')] class ext
                     <flux:table.columns>
                         <flux:table.column>Nama Mahasiswa</flux:table.column>
                         <flux:table.column>Judul KP</flux:table.column>
-                        <flux:table.column>Status</flux:table.column>
+                        <flux:table.column>Status Pengajuan KP</flux:table.column>
                         {{-- KOLOM BARU --}}
                         <flux:table.column>Aksi</flux:table.column>
                     </flux:table.columns>
@@ -360,22 +364,20 @@ new #[Title('Validasi Berkas KP')] #[Layout('components.layouts.app')] class ext
 {{--     Modal BARU untuk menerbitkan SPK--}}
     <flux:modal name="spk-modal" class="md:w-96">
         @if ($kpToIssueSpk)
-            <div class="space-y-6 text-center">
-                <div class="mx-auto flex size-12 items-center justify-center rounded-full bg-green-100">
-                    <flux:icon name="check-circle" class="size-6 text-green-600" />
-                </div>
+            <div class="space-y-6">
                 <div>
-                    <flux:heading size="lg">Terbitkan SPK?</flux:heading>
+                    <flux:heading size="lg">Penerbitan SPK</flux:heading>
                     <flux:text class="mt-2">
-                        Anda akan menerbitkan SPK untuk mahasiswa: <br>
-                        <span class="font-bold">{{ $kpToIssueSpk->mahasiswa->nama_mahasiswa }}</span>.
-                        <br><br>
-                        Mahasiswa akan diberi tahu dan dapat mengunduh SPK. Lanjutkan?
+                        Input Nomor SPK untuk mahasiswa: <span class="font-bold">{{ $kpToIssueSpk->mahasiswa->nama_mahasiswa }}</span>.
                     </flux:text>
                 </div>
-                <div class="flex justify-center gap-3">
-                    <flux:modal.close><flux:button variant="ghost">Batal</flux:button></flux:modal.close>
-                    <flux:button wire:click="terbitkanSpk" variant="primary">Ya, Terbitkan SPK</flux:button>
+                <div>
+                    {{-- INPUT BARU --}}
+                    <flux:input wire:model="nomor_spk" label="Nomor SPK" required />
+                </div>
+                <div class="flex justify-end gap-3">
+                    <flux:modal.close><flux:button type="button" variant="ghost">Batal</flux:button></flux:modal.close>
+                    <flux:button wire:click="terbitkanSpk" variant="primary">Simpan & Terbitkan</flux:button>
                 </div>
             </div>
         @endif

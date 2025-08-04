@@ -24,104 +24,74 @@ class ProductionLikeSeeder extends Seeder
             $this->command->info('Menyiapkan data master...');
             $jurusanTI = Jurusan::create(['kode_jurusan' => 'IF', 'nama_jurusan' => 'Teknik Informatika']);
             $jurusanSI = Jurusan::create(['kode_jurusan' => 'SI', 'nama_jurusan' => 'Sistem Informasi']);
-            $ruangan1 = Ruangan::create(['nama_ruangan' => 'Ruang Seminar A', 'lokasi_gedung' => 'Gedung F']);
-            $ruangan2 = Ruangan::create(['nama_ruangan' => 'Ruang Rapat B', 'lokasi_gedung' => 'Gedung F']);
+            $jurusanTE = Jurusan::create(['kode_jurusan' => 'TE', 'nama_jurusan' => 'Teknik Elektro']);
+            $ruangan1 = Ruangan::create(['nama_ruangan' => 'Ruang Seminar F1', 'lokasi_gedung' => 'Gedung F']);
+            $ruangan2 = Ruangan::create(['nama_ruangan' => 'Ruang Rapat Dekanat', 'lokasi_gedung' => 'Gedung A']);
+            $ruangan3 = Ruangan::create(['nama_ruangan' => 'Aula Gedung C', 'lokasi_gedung' => 'Gedung C']);
+            $ruangans = Ruangan::all();
 
             $this->command->info('Membuat akun statis...');
-            User::create(['name' => 'Bapendik SIKAP', 'email' => 'bapendik@sikap.test', 'password' => Hash::make('password'), 'role' => 'Bapendik']);
-
+            User::create(['name' => 'Admin Bapendik', 'email' => 'bapendik@sikap.test', 'password' => Hash::make('password'), 'role' => 'Bapendik']);
             $dosenKomisiUser = User::create(['name' => 'Prof. Dr. Dosen Komisi', 'email' => 'doskom@sikap.test', 'password' => Hash::make('password'), 'role' => 'Dosen Komisi']);
             Dosen::create(['user_id' => $dosenKomisiUser->id, 'jurusan_id' => $jurusanTI->id, 'nama_dosen' => $dosenKomisiUser->name, 'nip' => '198001012005011001', 'is_komisi' => true]);
 
             $this->command->info('Membuat data dosen...');
             $dosenPembimbings = collect();
             for ($i = 1; $i <= 10; $i++) {
-                $user = User::factory()->create([
-                    'email' => "dosen{$i}@sikap.test",
-                    'role' => 'Dosen Pembimbing'
-                ]);
-                $dosen = Dosen::factory()->create([
-                    'user_id' => $user->id,
-                    'jurusan_id' => $jurusanTI->id,
-                    'nama_dosen' => $user->name, // <-- Perbaikan di sini
-                ]);
+                $user = User::factory()->create(['email' => "dosen{$i}@sikap.test", 'role' => 'Dosen Pembimbing']);
+                $dosen = Dosen::factory()->create(['user_id' => $user->id, 'jurusan_id' => $jurusanTI->id, 'nama_dosen' => $user->name]);
                 $dosenPembimbings->push($dosen);
             }
 
-            $this->command->info('Membuat data mahasiswa dan mensimulasikan alur kerja...');
-            for ($i = 1; $i <= 30; $i++) {
-                $userMhs = User::factory()->create([
-                    'email' => "mahasiswa{$i}@sikap.test",
-                    'role' => 'Mahasiswa'
-                ]);
-                $mahasiswa = Mahasiswa::factory()->create([
-                    'user_id' => $userMhs->id,
-                    'jurusan_id' => $jurusanTI->id,
-                    'nama_mahasiswa' => $userMhs->name, // <-- Perbaikan di sini
-                ]);
+            $this->command->info('Membuat data mahasiswa...');
+            $mahasiswas = collect();
+            for ($i = 1; $i <= 40; $i++) {
+                $email = ($i == 1) ? "wildan@sikap.test" : "mahasiswa{$i}@sikap.test";
+                $userMhs = User::factory()->create(['email' => $email, 'role' => 'Mahasiswa', 'name' => ($i == 1) ? 'Wildan Nouval' : fake('id_ID')->name()]);
+                $mahasiswa = Mahasiswa::factory()->create(['user_id' => $userMhs->id, 'jurusan_id' => $jurusanTI->id, 'nama_mahasiswa' => $userMhs->name]);
+                $mahasiswas->push($mahasiswa);
+            }
 
-                $progress = rand(1, 100);
+            $this->command->info('Membuat data surat pengantar...');
+            foreach ($mahasiswas as $index => $mahasiswa) {
+                if ($index < 5) SuratPengantar::factory()->create(['mahasiswa_id' => $mahasiswa->id, 'status_surat_pengantar' => 'Diajukan']);
+                elseif ($index < 10) SuratPengantar::factory()->create(['mahasiswa_id' => $mahasiswa->id, 'status_surat_pengantar' => 'Ditolak', 'catatan_surat' => 'Tujuan instansi tidak relevan. Harap ajukan yang baru.']);
+                else SuratPengantar::factory()->create(['mahasiswa_id' => $mahasiswa->id, 'status_surat_pengantar' => 'Disetujui']);
+            }
 
-                if ($progress > 5) {
-                    SuratPengantar::factory()->create(['mahasiswa_id' => $mahasiswa->id, 'status_surat_pengantar' => 'Disetujui']);
+            $this->command->info('Mensimulasikan alur kerja KP & Seminar...');
+            foreach ($mahasiswas as $index => $mahasiswa) {
+                if ($index < 5) continue;
+
+                $kp = KerjaPraktek::factory()->create(['mahasiswa_id' => $mahasiswa->id, 'dosen_pembimbing_id' => $dosenPembimbings->random()->id]);
+
+                if ($index < 10) { $kp->update(['status_pengajuan_kp' => 'Diajukan']); continue; }
+                if ($index < 15) { $kp->update(['status_pengajuan_kp' => 'Proses di Komisi']); continue; }
+                if ($index < 20) { $kp->update(['status_pengajuan_kp' => 'Disetujui']); continue; }
+
+                $kp->update(['status_pengajuan_kp' => 'SPK Terbit', 'status_kp' => 'Berlangsung']);
+
+                $jumlahBimbingan = ($index < 25) ? rand(1, 5) : rand(6, 12);
+                for ($j = 0; $j < $jumlahBimbingan; $j++) {
+                    Konsultasi::factory()->create([
+                        'kerja_praktek_id' => $kp->id, 'mahasiswa_id' => $mahasiswa->id, 'dosen_pembimbing_id' => $kp->dosen_pembimbing_id,
+                        'status_verifikasi' => ($j < $jumlahBimbingan - 2) ? 'Diverifikasi' : 'Menunggu Verifikasi',
+                    ]);
                 }
 
-                if ($progress > 15) {
-                    $dospem = $dosenPembimbings->random();
-                    $kp = KerjaPraktek::factory()->create(['mahasiswa_id' => $mahasiswa->id]);
+                $bimbinganVerified = $kp->konsultasis()->where('status_verifikasi', 'Diverifikasi')->count();
+                if ($bimbinganVerified < 6) continue;
 
-                    $status = 'Diajukan';
-                    if ($progress > 30) $status = 'Proses di Komisi';
-                    if ($progress > 45) $status = 'Disetujui';
-                    if ($progress > 55) {
-                        $status = 'SPK Terbit';
-                        $kp->update(['dosen_pembimbing_id' => $dospem->id, 'status_kp' => 'Berlangsung']);
-                    }
-                    if ($progress > 95) $status = 'Ditolak';
+                $seminar = Seminar::factory()->create(['kerja_praktek_id' => $kp->id, 'ruangan_id' => $ruangans->random()->id]);
 
-                    $kp->update(['status_pengajuan_kp' => $status]);
-                    if ($status === 'Ditolak') $kp->update(['catatan_kp' => 'Proposal kurang relevan, harap diperbaiki.']);
-
-                    if (in_array($status, ['SPK Terbit'])) {
-                        $jumlahBimbingan = rand(1, 10);
-                        for ($j = 0; $j < $jumlahBimbingan; $j++) {
-                            Konsultasi::factory()->create([
-                                'kerja_praktek_id' => $kp->id,
-                                'mahasiswa_id' => $mahasiswa->id,
-                                'dosen_pembimbing_id' => $dospem->id,
-                                'status_verifikasi' => (rand(1, 10) > 3) ? 'Diverifikasi' : 'Menunggu Verifikasi',
-                            ]);
-                        }
-
-                        $bimbinganVerified = $kp->konsultasis()->where('status_verifikasi', 'Diverifikasi')->count();
-                        if ($progress > 80 && $bimbinganVerified >= 6) {
-                            $seminar = Seminar::factory()->create([
-                                'kerja_praktek_id' => $kp->id,
-                                'ruangan_id' => (rand(0, 1) ? $ruangan1->id : $ruangan2->id),
-                            ]);
-
-                            $statusSeminar = 'Diajukan';
-                            if ($progress > 85) $statusSeminar = 'Dijadwalkan';
-                            if ($progress > 92) {
-                                $statusSeminar = 'Dinilai';
-                                $nilai_lap = rand(75, 95);
-                                $nilai_dos = rand(78, 98);
-                                $nilai_angka = ($nilai_lap * 0.4) + ($nilai_dos * 0.6);
-                                if ($nilai_angka >= 80) $nilai_huruf = 'A';
-                                elseif ($nilai_angka >= 75) $nilai_huruf = 'AB';
-                                elseif ($nilai_angka >= 70) $nilai_huruf = 'B';
-                                else $nilai_huruf = 'BC';
-
-                                $seminar->update([
-                                    'nilai_pembimbing_lapangan' => $nilai_lap,
-                                    'nilai_dosen_pembimbing' => $nilai_dos,
-                                    'nilai_akhir' => $nilai_huruf,
-                                ]);
-                                $kp->update(['status_kp' => 'Selesai']);
-                            }
-                            $seminar->update(['status_seminar' => $statusSeminar]);
-                        }
-                    }
+                if ($index < 30) $seminar->update(['status_seminar' => 'Diajukan']);
+                elseif ($index < 35) $seminar->update(['status_seminar' => 'Dijadwalkan']);
+                else {
+                    $seminar->update([
+                        'status_seminar' => 'Dinilai', 'nilai_pembimbing_lapangan' => rand(75, 95),
+                        'nilai_dosen_pembimbing' => rand(78, 98), 'nilai_akhir' => ['A', 'AB', 'B', 'BC'][rand(0, 3)],
+                    ]);
+                    $kp->update(['status_kp' => 'Selesai']);
                 }
             }
         });

@@ -2,19 +2,19 @@
 
 use App\Http\Controllers\KerjaPraktekController;
 use App\Http\Controllers\LaporanController;
+use App\Http\Controllers\PenggunaController;
 use App\Http\Controllers\SeminarController;
 use App\Http\Controllers\SuratPengantarController;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Route;
 use Livewire\Volt\Volt;
 
 Route::get('/', function () {
-    return view('welcome');
+    if (Auth::check()) {
+        return redirect()->route('dashboard');
+    }
+    return redirect()->route('login');
 })->name('home');
-
-//Route::view('dashboard', 'dashboard')
-//    ->middleware(['auth', 'verified'])
-//    ->name('dashboard');
-//Volt::route('login', 'auth.login')->name('login');
 
 Route::middleware(['auth'])->group(function () {
     Volt::route('dashboard', 'dashboard')->name('dashboard');
@@ -29,6 +29,8 @@ Route::middleware(['auth'])->group(function () {
     Route::get('/surat-pengantar/{id}/export', [SuratPengantarController::class, 'exportWord'])->name('surat-pengantar.export');
     Route::get('/kerja-praktek/{id}/export-spk', [KerjaPraktekController::class, 'exportSpk'])->name('kp.export-spk');
     Route::get('/seminar/{id}/export-berita-acara', [SeminarController::class, 'exportBeritaAcara'])->name('seminar.export-berita-acara');
+    Route::get('/master/pengguna/template', [PenggunaController::class, 'downloadTemplate'])
+        ->name('master.pengguna.template');
 
     // --- RUTE MAHASISWA ---
     Route::middleware('role:Mahasiswa')->prefix('mahasiswa')->group(function () {
@@ -74,7 +76,7 @@ Route::middleware(['auth'])->group(function () {
     });
 
     // --- RUTE BERSAMA (BAPENDIK DAN DOSEN KOMISI) ---
-    Route::middleware('role:Bapendik,Dosen Komisi')->group(function () {
+    Route::middleware('role:Bapendik,Dosen Komisi,Dosen Pembimbing')->group(function () {
         Volt::route('/laporan-arsip', 'bapendik.laporan.index')->name('bapendik.laporan');
         Route::get('/laporan/export-kp', [LaporanController::class, 'exportKp'])->name('laporan.export-kp');
     });

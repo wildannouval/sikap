@@ -17,10 +17,24 @@ new #[Title('Manajemen Ruangan')] #[Layout('components.layouts.app')] class exte
     public string $nama_ruangan = '';
     public string $lokasi_gedung = '';
 
+    // Properti BARU untuk search
+    #[Url(as: 'q')]
+    public string $search = '';
+
+    // Hook BARU untuk reset paginasi
+    public function updatedSearch()
+    {
+        $this->resetPage();
+    }
+
     #[Computed]
     public function ruangans()
     {
-        return Ruangan::orderBy('nama_ruangan')->paginate(10);
+        // Query DIPERBARUI dengan logika pencarian
+        return Ruangan::where('nama_ruangan', 'like', '%' . $this->search . '%')
+            ->orWhere('lokasi_gedung', 'like', '%' . $this->search . '%')
+            ->orderBy('nama_ruangan')
+            ->paginate(10);
     }
 
     public function add()
@@ -54,6 +68,7 @@ new #[Title('Manajemen Ruangan')] #[Layout('components.layouts.app')] class exte
             Flux::toast(variant: 'success', heading: 'Berhasil', text: 'Ruangan baru berhasil ditambahkan.');
         }
         Flux::modal('ruangan-modal')->close();
+        $this->resetForm();
     }
 
     public function delete($id)
@@ -65,6 +80,7 @@ new #[Title('Manajemen Ruangan')] #[Layout('components.layouts.app')] class exte
     public function resetForm()
     {
         $this->reset(['editing', 'ruanganId', 'nama_ruangan', 'lokasi_gedung']);
+        $this->resetErrorBag();
     }
 }; ?>
 
@@ -80,11 +96,16 @@ new #[Title('Manajemen Ruangan')] #[Layout('components.layouts.app')] class exte
             <flux:button variant="primary" icon="plus" wire:click="add">Tambah Ruangan</flux:button>
         </div>
     </div>
-    <flux:separator variant="subtle"/>
+    <flux:separator/>
+
+    <div class="py-4 mt-4 dark:border-neutral-700">
+        <flux:input wire:model.live.debounce.300ms="search" placeholder="Cari nama ruangan atau lokasi gedung..." icon="magnifying-glass" />
+    </div>
 
     {{-- Tabel Daftar Ruangan --}}
-    <flux:card class="mt-8">
-        <flux:table>
+    <flux:card class="mt-4">
+
+        <flux:table :paginate="$this->ruangans">
             <flux:table.columns>
                 <flux:table.column>Nama Ruangan</flux:table.column>
                 <flux:table.column>Lokasi Gedung</flux:table.column>
@@ -136,9 +157,9 @@ new #[Title('Manajemen Ruangan')] #[Layout('components.layouts.app')] class exte
                         @endforelse
                     </flux:table.rows>
             </flux:table>
-            <div class="border-t p-4 dark:border-neutral-700">
-                <flux:pagination :paginator="$this->ruangans"/>
-            </div>
+{{--            <div class="border-t p-4 dark:border-neutral-700">--}}
+{{--                <flux:pagination :paginator="$this->ruangans"/>--}}
+{{--            </div>--}}
         </flux:card>
 
         {{-- Modal untuk Tambah/Edit Ruangan --}}
