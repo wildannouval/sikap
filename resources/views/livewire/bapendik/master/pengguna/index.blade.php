@@ -334,9 +334,9 @@ new #[Title('Manajemen Pengguna')] #[Layout('components.layouts.app')] class ext
 
         {{-- Grup Tombol Aksi --}}
         <div class="flex items-center gap-2 w-full sm:w-auto">
-            <flux:button as="a" href="{{ route('master.pengguna.template') }}" variant="secondary" icon="document-arrow-down" class="flex-1 sm:flex-none">Template</flux:button>
+            <flux:button as="a" href="{{ route('master.pengguna.template') }}" variant="primary" icon="document-arrow-down" class="flex-1 sm:flex-none">Template</flux:button>
             <flux:modal.trigger name="import-modal">
-                <flux:button variant="secondary" icon="document-arrow-up" class="flex-1 sm:flex-none">Impor</flux:button>
+                <flux:button variant="primary" icon="document-arrow-up" class="flex-1 sm:flex-none">Impor</flux:button>
             </flux:modal.trigger>
             <flux:modal.trigger name="user-modal">
                 <flux:button variant="primary" icon="plus" class="flex-1 sm:flex-none">Tambah</flux:button>
