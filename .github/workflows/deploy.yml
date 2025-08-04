@@ -41,3 +41,4 @@ jobs:
             # Build aset frontend
             npm install
             npm run build
+            sudo systemctl restart php8.3-fpm
