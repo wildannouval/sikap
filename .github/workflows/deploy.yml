@@ -30,8 +30,14 @@ jobs:
 
             # Lanjutkan dengan proses instalasi
             composer install --no-dev --optimize-autoloader
-            php artisan migrate --force
+
+            # HAPUS CACHE LAMA, lalu buat cache baru
             php artisan optimize:clear
             php artisan optimize
+
+            # Jalankan migrasi
+            php artisan migrate --force
+
+            # Build aset frontend
             npm install
             npm run build
