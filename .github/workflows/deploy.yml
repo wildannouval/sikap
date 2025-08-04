@@ -36,3 +36,5 @@ jobs:
 
             # Restart PHP-FPM untuk memastikan semua cache bersih
             sudo systemctl restart php8.3-fpm
+
+            # Test Deploy
