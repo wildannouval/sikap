@@ -1,46 +1,37 @@
-name: linter
+name: Lint (Composer & PHP Syntax)
 
 on:
-  push:
-    branches:
-      - develop
-      - main
   pull_request:
-    branches:
-      - develop
-      - main
-
-permissions:
-  contents: write
+  push:
+    branches: [ "main" ]
 
 jobs:
-  quality:
+  lint:
     runs-on: ubuntu-latest
-    environment: Testing
+
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
       - name: Setup PHP
         uses: shivammathur/setup-php@v2
         with:
-          php-version: '8.4'
+          php-version: '8.3'
+          coverage: none
+          tools: composer
 
-      - name: Add Flux Credentials Loaded From ENV
-        run: composer config http-basic.composer.fluxui.dev "${{ secrets.FLUX_USERNAME }}" "${{ secrets.FLUX_LICENSE_KEY }}"
+      - name: Composer validate
+        run: composer validate --no-check-publish --strict
 
-      - name: Install Dependencies
+      - name: Install dependencies (no dev)
+        run: composer install --no-interaction --no-progress --prefer-dist --no-dev
+
+      - name: PHP syntax check (all *.php)
         run: |
-          composer install -q --no-ansi --no-interaction --no-scripts --no-progress --prefer-dist
-          npm install
-
-      - name: Run Pint
-        run: vendor/bin/pint
-
-      # - name: Commit Changes
-      #   uses: stefanzweifel/git-auto-commit-action@v5
-      #   with:
-      #     commit_message: fix code style
-      #     commit_options: '--no-verify'
-      #     file_pattern: |
-      #       **/*
-      #       !.github/workflows/*
+          set -e
+          PHP_FILES=$(git ls-files '*.php' || true)
+          if [ -z "$PHP_FILES" ]; then
+            echo "No PHP files to lint."
+            exit 0
+          fi
+          echo "$PHP_FILES" | xargs -n 1 -P 8 php -l

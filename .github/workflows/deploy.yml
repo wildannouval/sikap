@@ -5,12 +5,16 @@ on:
     branches: [ "main" ]
   workflow_dispatch:
 
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
 
     steps:
-      - name: SSH to VPS & deploy
+      - name: Deploy over SSH
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.SSH_HOST }}
@@ -21,43 +25,69 @@ jobs:
           command_timeout: 30m
           script: |
             set -e
-            cd /var/www/sikap
+            APP_DIR=/var/www/sikap
+            PHP_FPM=php8.3-fpm
 
-            echo "[git] set safe directory (jika perlu)"
-            git config --global --add safe.directory /var/www/sikap || true
+            echo "[0] Pastikan direktori aplikasi"
+            mkdir -p "$APP_DIR"
+            cd "$APP_DIR"
 
-            echo "[git] fetch & hard reset ke origin/main"
-            git fetch --all
+            echo "[1] Git safe dir + fetch & reset ke origin/main"
+            git config --global --add safe.directory "$APP_DIR" || true
+            if [ ! -d ".git" ]; then
+              # Pastikan remote sudah SSH (disiapkan sebelumnya di server)
+              git init
+              git remote add origin git@github.com:${GITHUB_REPOSITORY}.git || true
+            fi
+            git fetch --all --prune
             git reset --hard origin/main
 
-            echo "[perm] perizinan dasar"
+            echo "[2] Pastikan permission runtime Laravel"
+            mkdir -p storage/framework/{cache,sessions,views} storage/logs bootstrap/cache
             sudo chown -R $USER:www-data .
             sudo chmod -R 775 storage bootstrap/cache
-            mkdir -p storage/framework/{cache,sessions,views} storage/logs || true
 
-            echo "[deps] composer"
-            which composer || sudo apt-get update && sudo apt-get install -y composer
+            echo "[3] Pastikan composer terpasang"
+            if ! command -v composer >/dev/null 2>&1; then
+              sudo apt-get update -y
+              sudo apt-get install -y composer
+            fi
+
+            echo "[4] Install PHP extension penting (GD untuk QR/Excel/Word)"
+            php -m | grep -qi gd || (sudo apt-get update -y && sudo apt-get install -y php-gd php8.3-gd || true)
+
+            echo "[5] Composer install (tanpa dev) + autoloader optimal"
             composer install --no-dev --prefer-dist --no-interaction --optimize-autoloader
 
-            echo "[php ext] GD (untuk QR/Excel/Word)"
-            php -m | grep -qi gd || (sudo apt-get update && sudo apt-get install -y php-gd php8.3-gd || true)
+            echo "[6] .env & APP_KEY"
+            if [ ! -f .env ]; then
+              cp .env.example .env
+            fi
+            grep -q '^APP_KEY=base64:' .env || php artisan key:generate
 
-            echo "[laravel] migrate & cache"
-            php artisan migrate --force
+            echo "[7] Storage symlink & optimize"
             php artisan storage:link || true
             php artisan optimize:clear
             php artisan optimize
 
-            echo "[node] build asset dengan Vite"
-            which node || (curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash - && sudo apt-get install -y nodejs)
-            npm ci || npm install
-            npm run build
+            echo "[8] Migrasi database (pakai --force)"
+            php artisan migrate --force
 
-            echo "[demo] generate dokumen demo (opsional)"
+            echo "[9] Node.js untuk build asset (Vite) jika belum ada"
+            if ! command -v node >/dev/null 2>&1; then
+              curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+              sudo apt-get install -y nodejs
+            fi
+            if [ -f package.json ]; then
+              npm ci || npm install
+              npm run build
+            fi
+
+            echo "[10] (Opsional) Generate dokumen demo"
             php artisan demo:generate-docs --force || true
 
-            echo "[reload] php-fpm & nginx"
-            sudo systemctl reload php8.3-fpm || sudo systemctl restart php8.3-fpm || true
+            echo "[11] Reload PHP-FPM & Nginx"
+            sudo systemctl reload $PHP_FPM || sudo systemctl restart $PHP_FPM || true
             sudo systemctl reload nginx || true
 
             echo "✅ Deploy selesai"

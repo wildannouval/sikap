@@ -1,19 +1,29 @@
-name: tests
+name: Tests (Laravel)
 
 on:
-  push:
-    branches:
-      - develop
-      - main
   pull_request:
-    branches:
-      - develop
-      - main
+  push:
+    branches: [ "main" ]
 
 jobs:
-  ci:
+  test:
     runs-on: ubuntu-latest
-    environment: Testing
+
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_DATABASE: testing
+          MYSQL_USER: laravel
+          MYSQL_PASSWORD: secret
+          MYSQL_ROOT_PASSWORD: root
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -proot"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
 
     steps:
       - name: Checkout
@@ -22,33 +32,38 @@ jobs:
       - name: Setup PHP
         uses: shivammathur/setup-php@v2
         with:
-          php-version: 8.4
-          tools: composer:v2
-          coverage: xdebug
+          php-version: '8.3'
+          extensions: mbstring, xml, bcmath, curl, zip, gd, pdo_mysql
+          coverage: none
+          tools: composer
 
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-          cache: 'npm'
+      - name: Copy .env.testing
+        run: |
+          cp .env.example .env.testing
+          cat >> .env.testing <<'ENV'
+          APP_ENV=testing
+          APP_DEBUG=true
+          APP_KEY=
+          DB_CONNECTION=mysql
+          DB_HOST=127.0.0.1
+          DB_PORT=3306
+          DB_DATABASE=testing
+          DB_USERNAME=laravel
+          DB_PASSWORD=secret
+          CACHE_DRIVER=array
+          SESSION_DRIVER=array
+          QUEUE_CONNECTION=sync
+          FILESYSTEM_DISK=local
+          ENV
 
-      - name: Install Node Dependencies
-        run: npm i
+      - name: Install dependencies
+        run: composer install --no-interaction --no-progress --prefer-dist
 
-      - name: Add Flux Credentials Loaded From ENV
-        run: composer config http-basic.composer.fluxui.dev "${{ secrets.FLUX_USERNAME }}" "${{ secrets.FLUX_LICENSE_KEY }}"
+      - name: Generate app key (testing)
+        run: php -d variables_order=EGPCS artisan key:generate --env=testing
 
-      - name: Install Dependencies
-        run: composer install --no-interaction --prefer-dist --optimize-autoloader
+      - name: Run migrations (testing)
+        run: php -d variables_order=EGPCS artisan migrate --env=testing --force
 
-      - name: Copy Environment File
-        run: cp .env.example .env
-
-      - name: Generate Application Key
-        run: php artisan key:generate
-
-      - name: Build Assets
-        run: npm run build
-
-      - name: Run Tests
-        run: ./vendor/bin/pest
+      - name: Run tests
+        run: php -d variables_order=EGPCS artisan test --env=testing
