@@ -1,40 +1,63 @@
-name: Deploy SIKAP Application
+name: Deploy to VPS
 
 on:
   push:
-    branches:
-      - main
+    branches: [ "main" ]
+  workflow_dispatch:
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
+
     steps:
-      - name: SSH and Deploy
-        uses: appleboy/ssh-action@master
+      - name: SSH to VPS & deploy
+        uses: appleboy/ssh-action@v1.0.3
         with:
-          host: ${{ secrets.VPS_HOST }}
-          username: ${{ secrets.VPS_USER }}
-          key: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_KEY }}
+          port: ${{ secrets.SSH_PORT }}
+          timeout: 60s
+          command_timeout: 30m
           script: |
+            set -e
             cd /var/www/sikap
 
-            # PERBAIKAN: Gunakan fetch dan reset, bukan pull
+            echo "[git] set safe directory (jika perlu)"
+            git config --global --add safe.directory /var/www/sikap || true
+
+            echo "[git] fetch & hard reset ke origin/main"
             git fetch --all
             git reset --hard origin/main
 
-            # Memberikan izin folder
+            echo "[perm] perizinan dasar"
             sudo chown -R $USER:www-data .
             sudo chmod -R 775 storage bootstrap/cache
+            mkdir -p storage/framework/{cache,sessions,views} storage/logs || true
 
-            # Lanjutkan dengan proses instalasi
-            composer install --no-dev --optimize-autoloader
+            echo "[deps] composer"
+            which composer || sudo apt-get update && sudo apt-get install -y composer
+            composer install --no-dev --prefer-dist --no-interaction --optimize-autoloader
+
+            echo "[php ext] GD (untuk QR/Excel/Word)"
+            php -m | grep -qi gd || (sudo apt-get update && sudo apt-get install -y php-gd php8.3-gd || true)
+
+            echo "[laravel] migrate & cache"
             php artisan migrate --force
+            php artisan storage:link || true
             php artisan optimize:clear
             php artisan optimize
-            npm install
+
+            echo "[node] build asset dengan Vite"
+            which node || (curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash - && sudo apt-get install -y nodejs)
+            npm ci || npm install
             npm run build
 
-            # Restart PHP-FPM untuk memastikan semua cache bersih
-            sudo systemctl restart php8.3-fpm
+            echo "[demo] generate dokumen demo (opsional)"
+            php artisan demo:generate-docs --force || true
 
-            # Test Deploy
+            echo "[reload] php-fpm & nginx"
+            sudo systemctl reload php8.3-fpm || sudo systemctl restart php8.3-fpm || true
+            sudo systemctl reload nginx || true
+
+            echo "✅ Deploy selesai"
