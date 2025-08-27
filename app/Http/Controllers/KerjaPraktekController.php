@@ -7,6 +7,9 @@ use PhpOffice\PhpWord\PhpWord;
 use PhpOffice\PhpWord\IOFactory;
 use PhpOffice\PhpWord\TemplateProcessor;
 use Illuminate\Support\Facades\Storage;
+use App\Services\DocSigner;
+use Carbon\Carbon;
+
 
 class KerjaPraktekController extends Controller
 {
@@ -50,5 +53,37 @@ class KerjaPraktekController extends Controller
 
         // Unduh file lalu hapus dari server
         return response()->download($tempPath)->deleteFileAfterSend(true);
+    }
+
+    public function cetakSpk($id, \App\Services\DocSigner $signer)
+    {
+    $m = \App\Models\KerjaPraktek::with(['mahasiswa.jurusan','dosenPembimbing'])->findOrFail($id);
+
+    // Tanggal2 diambil dari kolom yang ada; fallback ke now() bila null
+    $tanggalPenunjukan = $m->tanggal_disetujui_kp ? \Carbon\Carbon::parse($m->tanggal_disetujui_kp) : \Carbon\Carbon::now();
+    $tanggalTerbit     = $m->tanggal_disetujui_spk ? \Carbon\Carbon::parse($m->tanggal_disetujui_spk) : \Carbon\Carbon::now();
+
+    $values = [
+        // ⇩ Sesuai TEMPLATE_SPK.docx
+        'nomor_spk'                      => $m->nomor_spk ?? '-',
+        'tanggal_penunjukan'             => $tanggalPenunjukan->translatedFormat('d F Y'),
+        'tanggal_terbit_spk'             => $tanggalTerbit->translatedFormat('d F Y'),
+        'nama_mahasiswa'                 => optional($m->mahasiswa)->nama_mahasiswa ?? '-',
+        'nim_mahasiswa'                  => optional($m->mahasiswa)->nim ?? '-',
+        'jurusan_mahasiswa'              => optional($m->mahasiswa?->jurusan)->nama_jurusan ?? '-',
+        'judul_kerja_praktik_mahasiswa'  => $m->judul_kp ?? '-',            // <- pakai judul_kp
+        'nama_dosen_pembimbing'          => optional($m->dosenPembimbing)->nama_dosen ?? '-', // <- nama_dosen
+        'nip_dosen_pembimbing'           => optional($m->dosenPembimbing)->nip ?? '-',
+    ];
+
+    $docx = $signer->buildSignedDoc(
+        model: $m,
+        templatePath: storage_path('app/templates/TEMPLATE_SPK.docx'),
+        values: $values,
+        outName: "spk_{$m->uuid}",
+        signerName: 'Ketua Jurusan Informatika'
+    );
+
+    return response()->download($docx);
     }
 }

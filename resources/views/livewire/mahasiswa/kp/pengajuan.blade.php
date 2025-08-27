@@ -282,7 +282,7 @@ new #[Title('Pengajuan KP')] #[Layout('components.layouts.app')] class extends C
                                     @if ($kp->status_pengajuan_kp === 'SPK Terbit')
                                         <flux:button
                                             as="a"
-                                            href="{{ route('kp.export-spk', $kp->id) }}"
+                                            href="{{ route('spk.cetak', $kp->id) }}"
                                             variant="primary"
                                             size="xs"
                                             icon="document-arrow-down">

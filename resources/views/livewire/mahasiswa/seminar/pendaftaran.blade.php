@@ -280,7 +280,7 @@ new #[Title('Pendaftaran Seminar')] #[Layout('components.layouts.app')] class ex
                                         @elseif ($seminar->status_seminar === 'Dijadwalkan')
                                             <flux:button
                                                 as="a"
-                                                href="{{ route('seminar.export-berita-acara', $seminar->id) }}"
+                                                href="{{ route('bap.cetak', $seminar->id) }}"
                                                 target="_blank"
                                                 variant="primary"
                                                 size="xs"

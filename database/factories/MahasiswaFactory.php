@@ -2,24 +2,29 @@
 
 namespace Database\Factories;
 
+use App\Models\Jurusan;
 use Illuminate\Database\Eloquent\Factories\Factory;
+use Illuminate\Support\Str;
 
-/**
- * @extends \Illuminate\Database\Eloquent\Factories\Factory<\App\Models\Mahasiswa>
- */
 class MahasiswaFactory extends Factory
 {
-    /**
-     * Define the model's default state.
-     *
-     * @return array<string, mixed>
-     */
     public function definition(): array
     {
+        $faker = fake('id_ID');
+        $angkatan = $faker->numberBetween(2019, 2024);
+        $kodeJur = $faker->randomElement(['11','12','13']); // contoh kode jurusan
+        $urut = str_pad((string)$faker->numberBetween(1,9999), 4, '0', STR_PAD_LEFT);
+        $nim = substr((string)$angkatan, -2).'.'.$kodeJur.'.'.$urut;
+
         return [
-            // user_id, jurusan_id, dan nama_mahasiswa akan diisi dari Seeder
-            'nim' => 'G1A0' . fake()->unique()->numerify('#####'),
-            'tahun_angkatan' => fake()->numberBetween(2020, 2022),
+        'nama_mahasiswa'  => $faker->name(),
+        'nim'             => $nim,
+        'tahun_angkatan'  => $angkatan, // ⬅️ ganti dari 'angkatan' ke 'tahun_angkatan'
+        'jurusan_id'      => Jurusan::inRandomOrder()->value('id') ?? Jurusan::factory(),
+        'no_hp'           => '08'.$faker->numberBetween(1111111111, 9999999999),
+        'alamat'          => $faker->address(),
+        'created_at'      => now(),
+        'updated_at'      => now(),
         ];
     }
 }

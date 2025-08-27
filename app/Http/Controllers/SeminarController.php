@@ -5,6 +5,8 @@ namespace App\Http\Controllers;
 use App\Models\Seminar;
 use Illuminate\Support\Facades\Storage;
 use PhpOffice\PhpWord\TemplateProcessor;
+use App\Services\DocSigner;
+use Carbon\Carbon;
 
 class SeminarController extends Controller
 {
@@ -56,4 +58,43 @@ class SeminarController extends Controller
         // 5. Unduh file lalu hapus dari server
         return response()->download($tempPath)->deleteFileAfterSend(true);
     }
+
+public function cetakBap($id, \App\Services\DocSigner $signer)
+{
+    $m = \App\Models\Seminar::with([
+        'kerjaPraktek.mahasiswa.jurusan',
+        'kerjaPraktek.dosenPembimbing',
+        'ruangan'
+    ])->findOrFail($id);
+
+    $waktuSeminar = trim(
+        ($m->jam_mulai ? \Carbon\Carbon::parse($m->jam_mulai)->format('H:i') : '')
+        . ($m->jam_selesai ? ' - ' . \Carbon\Carbon::parse($m->jam_selesai)->format('H:i') : '')
+    );
+
+    $values = [
+        // ⇩ Sesuai TEMPLATE_BERITA_ACARA.docx
+        'nama_mahasiswa'                  => optional($m->kerjaPraktek?->mahasiswa)->nama_mahasiswa ?? '-',
+        'nim_mahasiswa'                   => optional($m->kerjaPraktek?->mahasiswa)->nim ?? '-',
+        'jurusan_mahasiswa'               => optional($m->kerjaPraktek?->mahasiswa?->jurusan)->nama_jurusan ?? '-',
+        // judul ambil dari KP final (kalau kamu simpan di kolom seminar gunakan itu; di template ada ${judul_kerja_praktik_mahasiswa})
+        'judul_kerja_praktik_mahasiswa'   => $m->judul_kp_final ?? $m->kerjaPraktek->judul_kp ?? '-',
+        'tanggal_seminar'                 => $m->tanggal_seminar ? \Carbon\Carbon::parse($m->tanggal_seminar)->translatedFormat('d F Y') : '-',
+        'waktu_seminar'                   => $waktuSeminar ?: '-',
+        'ruang_seminar'                   => optional($m->ruangan)->nama_ruangan ?? '-',
+        'nama_dosen_pembimbing'           => optional($m->kerjaPraktek?->dosenPembimbing)->nama_dosen ?? '-',
+        'nip_dosen_pembimbing'            => optional($m->kerjaPraktek?->dosenPembimbing)->nip ?? '-',
+        'tanggal_berita_acara'            => \Carbon\Carbon::now()->translatedFormat('d F Y'),
+    ];
+
+    $docx = $signer->buildSignedDoc(
+        model: $m,
+        templatePath: storage_path('app/templates/TEMPLATE_BERITA_ACARA.docx'),
+        values: $values,
+        outName: "bap_{$m->uuid}",
+        signerName: 'Ketua Jurusan Informatika'
+    );
+
+    return response()->download($docx);
+}
 }

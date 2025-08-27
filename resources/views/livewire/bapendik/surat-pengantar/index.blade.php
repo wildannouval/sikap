@@ -181,7 +181,7 @@ new #[Title('Validasi Surat Pengantar')] #[Layout('components.layouts.app')] cla
                                     <div class="flex items-center gap-2">
                                         <flux:button
                                             as="a"
-                                            href="{{ route('surat-pengantar.export', $surat->id) }}"
+                                            href="{{ route('surat.cetak', $surat->id) }}"
                                             target="_blank"
                                             size="xs"
                                             icon="document-arrow-down"
@@ -226,7 +226,7 @@ new #[Title('Validasi Surat Pengantar')] #[Layout('components.layouts.app')] cla
                                 </flux:table.cell>
                                 <flux:table.cell>
                                     @if($surat->status_surat_pengantar === 'Disetujui' || $surat->status_surat_pengantar === 'Siap Diambil')
-                                        <flux:button as="a" href="{{ route('surat-pengantar.export', $surat->id) }}" target="_blank" size="xs" icon="document-arrow-down" variant="ghost">
+                                        <flux:button as="a" href="{{ route('surat.cetak', $surat->id) }}" target="_blank" size="xs" icon="document-arrow-down" variant="ghost">
                                             Ekspor Surat
                                         </flux:button>
                                     @else

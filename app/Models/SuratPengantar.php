@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Str;
 
 class SuratPengantar extends Model
 {
@@ -26,8 +27,21 @@ class SuratPengantar extends Model
         'catatan_surat',
         'tanggal_disetujui_surat_pengantar',
         'tanggal_pengambilan_surat_pengantar',
-        'nomor_surat'
+        'nomor_surat',
+        'uuid','qr_token','qr_expires_at','ttd_signed_at','ttd_signed_by',
     ];
+
+    protected $casts = [
+    'qr_expires_at' => 'datetime',
+    'ttd_signed_at' => 'datetime',
+    ];
+    
+    protected static function booted()
+{
+    static::creating(function ($m) {
+        if (empty($m->uuid)) $m->uuid = (string) Str::uuid();
+    });
+}
 
     /**
      * Get the mahasiswa that owns the surat pengantar.

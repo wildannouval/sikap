@@ -4,22 +4,20 @@ namespace Database\Factories;
 
 use Illuminate\Database\Eloquent\Factories\Factory;
 
-/**
- * @extends \Illuminate\Database\Eloquent\Factories\Factory<\App\Models\Dosen>
- */
 class DosenFactory extends Factory
 {
-    /**
-     * Define the model's default state.
-     *
-     * @return array<string, mixed>
-     */
     public function definition(): array
     {
+        $faker = fake('id_ID');
+        $nip = $faker->numerify(str_repeat('#',18));
+
         return [
-            // user_id, jurusan_id, dan nama_dosen akan diisi dari Seeder
-            'nip' => fake()->unique()->numerify('198#########'.fake()->numberBetween(1, 9)),
-            'is_komisi' => false,
+            'nama_dosen' => 'Dr. '.$faker->lastName().' '.$faker->firstName(),
+            'nip' => $nip,
+            'email' => $faker->unique()->safeEmail(),
+            'no_hp' => '08'.$faker->numberBetween(1111111111, 9999999999),
+            'created_at' => now(),
+            'updated_at' => now(),
         ];
     }
 }

@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Support\Str;
 
 class Seminar extends Model
 {
@@ -25,7 +26,20 @@ class Seminar extends Model
         'nilai_pembimbing_lapangan', // Tambahkan ini
         'nilai_dosen_pembimbing', // Tambahkan ini
         'catatan',
+        'uuid','qr_token','qr_expires_at','ttd_signed_at','ttd_signed_by',
     ];
+
+    protected $casts = [
+    'qr_expires_at' => 'datetime',
+    'ttd_signed_at' => 'datetime',
+    ];
+
+    protected static function booted()
+    {
+        static::creating(function ($m) {
+            if (empty($m->uuid)) $m->uuid = (string) Str::uuid();
+        });
+    }
 
     public function kerjaPraktek(): BelongsTo
     {
