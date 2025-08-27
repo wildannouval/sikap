@@ -37,13 +37,12 @@ jobs:
           coverage: none
           tools: composer
 
-      - name: Copy .env.testing
+      - name: Prepare .env.testing
         run: |
           cp .env.example .env.testing
           cat >> .env.testing <<'ENV'
           APP_ENV=testing
           APP_DEBUG=true
-          APP_KEY=
           DB_CONNECTION=mysql
           DB_HOST=127.0.0.1
           DB_PORT=3306
@@ -56,13 +55,13 @@ jobs:
           FILESYSTEM_DISK=local
           ENV
 
-      - name: Install dependencies
+      - name: Composer install (with dev)
         run: composer install --no-interaction --no-progress --prefer-dist
 
       - name: Generate app key (testing)
         run: php -d variables_order=EGPCS artisan key:generate --env=testing
 
-      - name: Run migrations (testing)
+      - name: Migrate (testing)
         run: php -d variables_order=EGPCS artisan migrate --env=testing --force
 
       - name: Run tests

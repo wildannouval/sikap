@@ -20,18 +20,18 @@ jobs:
           coverage: none
           tools: composer
 
-      - name: Composer validate
+      - name: Composer validate (strict)
         run: composer validate --no-check-publish --strict
 
       - name: Install dependencies (no dev)
         run: composer install --no-interaction --no-progress --prefer-dist --no-dev
 
-      - name: PHP syntax check (all *.php)
+      - name: PHP syntax check
         run: |
           set -e
-          PHP_FILES=$(git ls-files '*.php' || true)
-          if [ -z "$PHP_FILES" ]; then
-            echo "No PHP files to lint."
+          FILES=$(git ls-files '*.php' || true)
+          if [ -z "$FILES" ]; then
+            echo "No PHP files."
             exit 0
           fi
-          echo "$PHP_FILES" | xargs -n 1 -P 8 php -l
+          echo "$FILES" | xargs -n 1 -P 8 php -l

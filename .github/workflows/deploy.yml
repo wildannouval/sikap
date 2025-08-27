@@ -14,66 +14,83 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Deploy over SSH
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # Upload semua source ke server (kecuali folder yang tidak perlu)
+      - name: Upload source to VPS
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_KEY }}
+          port: ${{ secrets.SSH_PORT }}
+          # kirim isi repo ke /var/www/sikap (exclude vendor & node_modules)
+          source: |
+            ./
+          target: /var/www/sikap
+          rm: true
+          overwrite: true
+          strip_components: 0
+          # exclude patterns agar upload lebih cepat
+          exclude: |
+            .git*
+            vendor/*
+            node_modules/*
+            storage/logs/*
+            storage/framework/cache/*
+            storage/framework/sessions/*
+            storage/framework/views/*
+            .env
+
+      - name: SSH — install & deploy on VPS
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_KEY }}
           port: ${{ secrets.SSH_PORT }}
-          timeout: 60s
+          timeout: 90s
           command_timeout: 30m
           script: |
             set -e
             APP_DIR=/var/www/sikap
             PHP_FPM=php8.3-fpm
 
-            echo "[0] Pastikan direktori aplikasi"
-            mkdir -p "$APP_DIR"
             cd "$APP_DIR"
 
-            echo "[1] Git safe dir + fetch & reset ke origin/main"
-            git config --global --add safe.directory "$APP_DIR" || true
-            if [ ! -d ".git" ]; then
-              # Pastikan remote sudah SSH (disiapkan sebelumnya di server)
-              git init
-              git remote add origin git@github.com:${GITHUB_REPOSITORY}.git || true
-            fi
-            git fetch --all --prune
-            git reset --hard origin/main
-
-            echo "[2] Pastikan permission runtime Laravel"
+            echo "[1] Pastikan direktori runtime laravel"
             mkdir -p storage/framework/{cache,sessions,views} storage/logs bootstrap/cache
             sudo chown -R $USER:www-data .
             sudo chmod -R 775 storage bootstrap/cache
 
-            echo "[3] Pastikan composer terpasang"
+            echo "[2] Pastikan composer terpasang"
             if ! command -v composer >/dev/null 2>&1; then
               sudo apt-get update -y
               sudo apt-get install -y composer
             fi
 
-            echo "[4] Install PHP extension penting (GD untuk QR/Excel/Word)"
+            echo "[3] Install ext GD (QR/Excel/Word butuh gd)"
             php -m | grep -qi gd || (sudo apt-get update -y && sudo apt-get install -y php-gd php8.3-gd || true)
 
-            echo "[5] Composer install (tanpa dev) + autoloader optimal"
+            echo "[4] Composer install (tanpa dev)"
             composer install --no-dev --prefer-dist --no-interaction --optimize-autoloader
 
-            echo "[6] .env & APP_KEY"
+            echo "[5] .env & APP_KEY"
             if [ ! -f .env ]; then
-              cp .env.example .env
+              if [ -f .env.example ]; then cp .env.example .env; fi
             fi
             grep -q '^APP_KEY=base64:' .env || php artisan key:generate
 
-            echo "[7] Storage symlink & optimize"
+            echo "[6] Storage symlink & optimize"
             php artisan storage:link || true
             php artisan optimize:clear
             php artisan optimize
 
-            echo "[8] Migrasi database (pakai --force)"
+            echo "[7] Migrasi database (pakai --force)"
             php artisan migrate --force
 
-            echo "[9] Node.js untuk build asset (Vite) jika belum ada"
+            echo "[8] Node.js & build asset (Vite)"
             if ! command -v node >/dev/null 2>&1; then
               curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
               sudo apt-get install -y nodejs
@@ -83,10 +100,10 @@ jobs:
               npm run build
             fi
 
-            echo "[10] (Opsional) Generate dokumen demo"
+            echo "[9] (Opsional) Generate dokumen demo"
             php artisan demo:generate-docs --force || true
 
-            echo "[11] Reload PHP-FPM & Nginx"
+            echo "[10] Reload services"
             sudo systemctl reload $PHP_FPM || sudo systemctl restart $PHP_FPM || true
             sudo systemctl reload nginx || true
 
