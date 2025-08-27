@@ -57,6 +57,8 @@ Route::middleware(['auth'])->group(function () {
     // Data master (Bapendik) — cukup SEKALI
     Route::middleware('role:Bapendik')->prefix('master')->group(function () {
         Volt::route('/pengguna', 'bapendik.master.pengguna.index')->name('master.pengguna');
+        Route::get('/pengguna/template', [PenggunaController::class, 'template'])
+        ->name('master.pengguna.template');
         Volt::route('/ruangan', 'bapendik.master.ruangan.index')->name('master.ruangan');
         Volt::route('/jurusan', 'bapendik.master.jurusan.index')->name('master.jurusan');
     });
