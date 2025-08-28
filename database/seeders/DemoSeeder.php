@@ -21,7 +21,7 @@ class DemoSeeder extends Seeder
     public function run(): void
     {
         DB::transaction(function () {
-            $now   = now();               // Asia/Jakarta
+            $now   = now();
             $faker = fake('id_ID');
 
             // ===== Master data =====
@@ -238,7 +238,10 @@ class DemoSeeder extends Seeder
             // Pastikan KP selesai
             $doneKp->update(['status_kp' => 'Selesai']);
 
-            // ========= C. RAMAIKAN KALENDER =========
+            // ========= C. RAMAIKAN KALENDER (tanpa mengubah 2 akun demo) =========
+            // Lindungi KP milik dua akun demo agar tidak ketimpa
+            $protectedKpIds = [$progressKp->id, $doneKp->id];
+
             // slot harian (3 slot)
             $slots = [
                 ['mulai' => '09:00:00', 'selesai' => '10:30:00'],
@@ -246,32 +249,38 @@ class DemoSeeder extends Seeder
                 ['mulai' => '13:30:00', 'selesai' => '15:00:00'],
             ];
 
-            // tanggal: 27–31 Agustus 2025 + 1–30 Sept 2025
+            // tanggal: 27–31 Agustus + 1–30 September (tahun berjalan)
+            $year = (int) now()->format('Y');
             $dates = [];
-            for ($d=27; $d<=31; $d++) $dates[] = now()->setDate(2025,8,$d)->toDateString();
-            for ($d=1; $d<=30; $d++)  $dates[] = now()->setDate(2025,9,$d)->toDateString();
+            for ($d=27; $d<=31; $d++) $dates[] = now()->setDate($year,8,$d)->toDateString();
+            for ($d=1; $d<=30; $d++)  $dates[] = now()->setDate($year,9,$d)->toDateString();
 
-            // ambil KPs "Berlangsung" secukupnya untuk mengisi banyak slot
-            $kps = KerjaPraktek::where('status_kp','Berlangsung')
+            // ambil KPs "Berlangsung" selain 2 akun demo & yang BELUM punya seminar
+            $pool = KerjaPraktek::where('status_kp','Berlangsung')
+                ->whereNotIn('id', $protectedKpIds)
+                ->whereDoesntHave('seminar')
                 ->inRandomOrder()
-                ->take(count($dates) * count($slots)) // maksimal 3 per hari
                 ->get();
 
-            $i = 0;
+            $poolIdx = 0;
             foreach ($dates as $tgl) {
-                // untuk tiap hari, isi 2–3 seminar (random)
-                $seminarsToday = rand(2,3);
+                $seminarsToday = rand(2,3); // isi 2–3 per hari
                 for ($s=0; $s<$seminarsToday; $s++) {
-                    if (!isset($kps[$i])) break;
-                    $kp = $kps[$i]; $i++;
+                    if (!isset($pool[$poolIdx])) { break 2; }
+                    $kp = $pool[$poolIdx]; $poolIdx++;
 
-                    // mix status: 70% Dijadwalkan (tgl >= today), 30% Dinilai (tgl yang lalu)
+                    // pilih status: future => Dijadwalkan; past (30%) => Dinilai
                     $isPast = (rand(1,100) <= 30);
                     $status = $isPast ? 'Dinilai' : 'Dijadwalkan';
 
-                    // pilih slot & ruangan random
+                    // slot & ruangan random
                     $slot = $slots[array_rand($slots)];
                     $ruangId = $ruangIds->random();
+
+                    // JANGAN overwrite kalau (tetap) sudah punya seminar (safety)
+                    if (Seminar::where('kerja_praktek_id', $kp->id)->exists()) {
+                        continue;
+                    }
 
                     $semAttrs = [
                         'judul_kp_final'  => 'Seminar '.$faker->words(3,true).' pada '.$faker->company(),
@@ -283,14 +292,16 @@ class DemoSeeder extends Seeder
                     ];
                     if ($hasSm('berkas_laporan_final')) $semAttrs['berkas_laporan_final'] = 'demo/berkas_laporan_final_'.$kp->id.'.pdf';
 
-                    // nilai jika Dinilai
                     if ($status === 'Dinilai') {
                         if ($hasSm('nilai_pembimbing_lapangan')) $semAttrs['nilai_pembimbing_lapangan'] = rand(78,95);
                         if ($hasSm('nilai_dosen_pembimbing'))    $semAttrs['nilai_dosen_pembimbing']    = rand(80,98);
                         if ($hasSm('nilai_akhir'))               $semAttrs['nilai_akhir']               = ['A','AB','B','BC'][rand(0,3)];
                     }
 
-                    Seminar::updateOrCreate(['kerja_praktek_id'=>$kp->id], $semAttrs);
+                    // Pakai create saja (bukan updateOrCreate) agar tidak menimpa apa pun
+                    Seminar::create(array_merge($semAttrs, [
+                        'kerja_praktek_id' => $kp->id,
+                    ]));
                 }
             }
         });
