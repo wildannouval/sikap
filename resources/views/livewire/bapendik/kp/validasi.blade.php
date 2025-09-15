@@ -92,7 +92,6 @@ new #[Title('Validasi Berkas KP')] #[Layout('components.layouts.app')] class ext
 
     public function forwardToKomisi($id)
     {
-        // PERBAIKAN: Hapus duplikasi, cukup panggil findOrFail sekali
         $kp = KerjaPraktek::findOrFail($id);
         $kp->update(['status_pengajuan_kp' => 'Proses di Komisi']);
 
@@ -129,250 +128,243 @@ new #[Title('Validasi Berkas KP')] #[Layout('components.layouts.app')] class ext
                 'status_pengajuan_kp' => 'SPK Terbit',
                 'tanggal_disetujui_spk' => now(),
                 'nomor_spk' => $this->nomor_spk,
-                'status_kp' => 'Berlangsung', // PERBAIKAN: Set status_kp menjadi Berlangsung
+                'status_kp' => 'Berlangsung',
             ]);
-
-            // PERBAIKAN: Pindahkan notifikasi ke sini, SEBELUM reset
+            
             $this->kpToIssueSpk->mahasiswa->user->notify(new SpkTerbit($this->kpToIssueSpk));
 
             Flux::modal('spk-modal')->close();
             Flux::toast(variant: 'success', heading: 'Berhasil', text: 'SPK telah diterbitkan.');
-
-            // Hapus dispatch event untuk download
-            // $this->dispatch('spk-terbit-dan-download', id: $this->kpToIssueSpk->id);
-
-            // Reset dilakukan di bagian paling akhir
+            
             $this->reset('kpToIssueSpk', 'nomor_spk');
         }
     }
 
 }; ?>
 
-<div x-on:spk-terbit-dan-download.window="window.open('/kerja-praktek/' + $event.detail.id + '/export-spk', '_blank')">
+<div>
     {{-- Header Halaman --}}
-    <div class="flex items-center justify-between">
-        <div>
-            <flux:heading size="xl" level="1">Validasi Berkas Kerja Praktik</flux:heading>
-            <flux:subheading size="lg" class="mb-6">Review kelengkapan administrasi pengajuan KP dari mahasiswa.</flux:subheading>
-        </div>
+    <div class="mb-6">
+        <flux:heading size="xl" level="1">Validasi Berkas Kerja Praktik</flux:heading>
+        <flux:subheading size="lg">Review kelengkapan administrasi pengajuan KP dari mahasiswa.</flux:subheading>
     </div>
-    <flux:separator/>
 
-    {{-- Input Search & Filter --}}
-    <div class="mt-6 flex flex-col md:flex-row gap-4">
-        <div class="flex-1">
-            <flux:input wire:model.live.debounce.300ms="search" placeholder="Cari berdasarkan nama, nim, atau judul KP..." icon="magnifying-glass" />
-        </div>
-        @if ($tab === 'riwayat')
-            <div class="w-full md:w-64">
-                <flux:select wire:model.live="statusFilter" placeholder="Filter status riwayat">
-                    <option value="">Semua Status Riwayat</option>
-                    <option value="Proses di Komisi">Proses di Komisi</option>
-                    <option value="Ditolak">Ditolak</option>
-                    <option value="SPK Terbit">SPK Terbit</option>
-                </flux:select>
+    {{-- [START] PERUBAHAN LAYOUT MENJADI DUA KOLOM --}}
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
+        
+        {{-- Kolom Kiri (Utama): Tabel dan Tab --}}
+        <div class="lg:col-span-2 space-y-6">
+            <div class="flex flex-col md:flex-row gap-4">
+                <div class="flex-1">
+                    <flux:input wire:model.live.debounce.300ms="search" placeholder="Cari berdasarkan nama, nim, atau judul KP..." icon="magnifying-glass" />
+                </div>
+                @if ($tab === 'riwayat')
+                    <div class="w-full md:w-64">
+                        <flux:select wire:model.live="statusFilter" placeholder="Filter status riwayat">
+                            <option value="">Semua Status Riwayat</option>
+                            <option value="Proses di Komisi">Proses di Komisi</option>
+                            <option value="Ditolak">Ditolak</option>
+                            <option value="SPK Terbit">SPK Terbit</option>
+                        </flux:select>
+                    </div>
+                @endif
             </div>
-        @endif
+
+            <flux:tab.group>
+                <flux:tabs wire:model.live="tab">
+                    <flux:tab name="administrasi">Review Administrasi</flux:tab>
+                    <flux:tab name="penerbitan">Penerbitan SPK</flux:tab>
+                    <flux:tab name="riwayat">Riwayat</flux:tab>
+                </flux:tabs>
+        
+                <flux:tab.panel name="administrasi">
+                    <flux:card class="mt-4">
+                        <flux:table :paginate="$this->reviewAdministrasi">
+                            <flux:table.columns>
+                                <flux:table.column>Nama Mahasiswa</flux:table.column>
+                                <flux:table.column>Judul KP</flux:table.column>
+                                <flux:table.column>Berkas</flux:table.column>
+                                <flux:table.column>Aksi</flux:table.column>
+                            </flux:table.columns>
+                            <flux:table.rows>
+                                @forelse ($this->reviewAdministrasi as $kp)
+                                    <flux:table.row :key="$kp->id">
+                                        <flux:table.cell variant="strong">{{ $kp->mahasiswa->nama_mahasiswa }}</flux:table.cell>
+                                        <flux:table.cell>{{ Str::limit($kp->judul_kp, 40) }}</flux:table.cell>
+                                        <flux:table.cell>
+                                            <div class="flex items-center gap-2">
+                                                <flux:button as="a" href="{{ asset('storage/' . $kp->proposal_kp) }}" target="_blank" size="xs" icon="document-arrow-down">Proposal</flux:button>
+                                                <flux:button as="a" href="{{ asset('storage/' . $kp->surat_keterangan_kp) }}" target="_blank" size="xs" icon="document-arrow-down">Surat Ket.</flux:button>
+                                            </div>
+                                        </flux:table.cell>
+                                        <flux:table.cell>
+                                            <div class="flex items-center gap-2">
+                                                <flux:modal.trigger :name="'reject-kp-' . $kp->id">
+                                                    <flux:button size="xs" variant="danger">Tolak</flux:button>
+                                                </flux:modal.trigger>
+                                                <flux:modal.trigger :name="'forward-kp-' . $kp->id">
+                                                    <flux:button size="xs" variant="primary">Teruskan ke Komisi</flux:button>
+                                                </flux:modal.trigger>
+                                            </div>
+                                        </flux:table.cell>
+                                    </flux:table.row>
+
+                                    <flux:modal :name="'reject-kp-' . $kp->id" class="md:w-96">
+                                        <div class="space-y-6 text-center">
+                                            <div class="mx-auto flex size-12 items-center justify-center rounded-full bg-red-100">
+                                                <flux:icon name="x-mark" class="size-6 text-red-600"/>
+                                            </div>
+                                            <div>
+                                                <flux:heading size="lg">Tolak Pengajuan KP?</flux:heading>
+                                                <flux:text class="mt-2">Anda yakin ingin menolak pengajuan KP dari <span class="font-bold">{{ $kp->mahasiswa->nama_mahasiswa }}</span>?</flux:text>
+                                            </div>
+                                            <div class="flex justify-center gap-3">
+                                                <flux:modal.close><flux:button variant="ghost">Batal</flux:button></flux:modal.close>
+                                                <flux:button variant="danger" wire:click="reject({{ $kp->id }})">Ya, Tolak</flux:button>
+                                            </div>
+                                        </div>
+                                    </flux:modal>
+
+                                    <flux:modal :name="'forward-kp-' . $kp->id" class="md:w-96">
+                                        <div class="space-y-6 text-center">
+                                            <div class="mx-auto flex size-12 items-center justify-center rounded-full bg-blue-100">
+                                                <flux:icon name="paper-airplane" class="size-6 text-blue-600" />
+                                            </div>
+                                            <div>
+                                                <flux:heading size="lg">Teruskan ke Komisi?</flux:heading>
+                                                <flux:text class="mt-2">Anda yakin ingin meneruskan pengajuan KP ini untuk direview lebih lanjut oleh Komisi?</flux:text>
+                                            </div>
+                                            <div class="flex justify-center gap-3">
+                                                <flux:modal.close><flux:button variant="ghost">Batal</flux:button></flux:modal.close>
+                                                <flux:button variant="primary" wire:click="forwardToKomisi({{ $kp->id }})">Ya, Teruskan</flux:button>
+                                            </div>
+                                        </div>
+                                    </flux:modal>
+                                @empty
+                                    <flux:table.row>
+                                        <flux:table.cell colspan="4" class="text-center py-12 text-zinc-500">
+                                            Tidak ada pengajuan KP yang perlu divalidasi.
+                                        </flux:table.cell>
+                                    </flux:table.row>
+                                @endforelse
+                            </flux:table.rows>
+                        </flux:table>
+                    </flux:card>
+                </flux:tab.panel>
+        
+                <flux:tab.panel name="penerbitan">
+                    <flux:card class="mt-4">
+                        <flux:table :paginate="$this->penerbitanSpk">
+                            <flux:table.columns>
+                                <flux:table.column>Nama Mahasiswa</flux:table.column>
+                                <flux:table.column>Judul KP</flux:table.column>
+                                <flux:table.column>Tgl. Disetujui Komisi</flux:table.column>
+                                <flux:table.column>Aksi</flux:table.column>
+                            </flux:table.columns>
+                            <flux:table.rows>
+                                @forelse ($this->penerbitanSpk as $kp)
+                                    <flux:table.row :key="$kp->id">
+                                        <flux:table.cell variant="strong">{{ $kp->mahasiswa->nama_mahasiswa }}</flux:table.cell>
+                                        <flux:table.cell>{{ Str::limit($kp->judul_kp, 40) }}</flux:table.cell>
+                                        <flux:table.cell>{{ \Carbon\Carbon::parse($kp->tanggal_disetujui_kp)->format('d/m/Y') }}</flux:table.cell>
+                                        <flux:table.cell>
+                                            <flux:button size="xs" variant="primary" wire:click="openSpkModal({{ $kp->id }})">
+                                                Terbitkan SPK
+                                            </flux:button>
+                                        </flux:table.cell>
+                                    </flux:table.row>
+                                @empty
+                                    <flux:table.row>
+                                        <flux:table.cell colspan="4" class="text-center py-12 text-zinc-500">
+                                            Tidak ada pengajuan yang perlu diterbitkan SPK-nya.
+                                        </flux:table.cell>
+                                    </flux:table.row>
+                                @endforelse
+                            </flux:table.rows>
+                        </flux:table>
+                    </flux:card>
+                </flux:tab.panel>
+
+                <flux:tab.panel name="riwayat">
+                    <flux:card class="mt-4">
+                        <flux:table :paginate="$this->riwayat">
+                            <flux:table.columns>
+                                <flux:table.column>Nama Mahasiswa</flux:table.column>
+                                <flux:table.column>Judul KP</flux:table.column>
+                                <flux:table.column>Status</flux:table.column>
+                                <flux:table.column>Aksi</flux:table.column>
+                            </flux:table.columns>
+                            <flux:table.rows>
+                                @forelse ($this->riwayat as $kp)
+                                    <flux:table.row :key="'riwayat-' . $kp->id">
+                                        <flux:table.cell variant="strong">{{ $kp->mahasiswa->nama_mahasiswa }}</flux:table.cell>
+                                        <flux:table.cell>{{ Str::limit($kp->judul_kp, 40) }}</flux:table.cell>
+                                        <flux:table.cell>
+                                            @php
+                                                $color = match($kp->status_pengajuan_kp) {
+                                                    'Proses di Komisi' => 'blue',
+                                                    'SPK Terbit' => 'green',
+                                                    'Ditolak' => 'red',
+                                                    default => 'zinc',
+                                                };
+                                            @endphp
+                                            <flux:badge :color="$color" size="sm">{{ $kp->status_pengajuan_kp }}</flux:badge>
+                                        </flux:table.cell>
+                                        <flux:table.cell>
+                                            @if ($kp->status_pengajuan_kp === 'SPK Terbit')
+                                                <flux:button as="a" href="{{ route('spk.cetak', $kp->id) }}" size="xs" variant="ghost" icon="document-arrow-down" />
+                                            @else
+                                                -
+                                            @endif
+                                        </flux:table.cell>
+                                    </flux:table.row>
+                                @empty
+                                    <flux:table.row>
+                                        <flux:table.cell colspan="4" class="text-center py-12">Belum ada riwayat pengajuan KP.</flux:table.cell>
+                                    </flux:table.row>
+                                @endforelse
+                            </flux:table.rows>
+                        </flux:table>
+                    </flux:card>
+                </flux:tab.panel>
+            </flux:tab.group>
+        </div>
+        
+        {{-- Kolom Kanan (Informasi) --}}
+        <div class="lg:col-span-1 space-y-8">
+            <flux:card>
+                <h3 class="text-lg font-semibold mb-4">Alur Kerja Validasi KP</h3>
+                <ol class="list-decimal list-inside space-y-4 text-sm text-zinc-600 dark:text-zinc-400">
+                    <li>
+                        <b>Review Administrasi:</b><br>
+                        Periksa kelengkapan berkas (Proposal & Surat Keterangan) di tab pertama. Jika lengkap, klik "Teruskan ke Komisi". Jika tidak, klik "Tolak".
+                    </li>
+                    <li>
+                        <b>Menunggu Komisi:</b><br>
+                        Setelah diteruskan, pengajuan akan direview oleh Dosen Komisi. Statusnya akan menjadi "Proses di Komisi" dan dapat dipantau di tab "Riwayat".
+                    </li>
+                    <li>
+                        <b>Penerbitan SPK:</b><br>
+                        Jika Dosen Komisi sudah menyetujui, pengajuan akan muncul di tab "Penerbitan SPK".
+                    </li>
+                     <li>
+                        Klik "Terbitkan SPK", masukkan nomor SPK, dan simpan. Status akan berubah menjadi "SPK Terbit" dan pindah ke "Riwayat".
+                    </li>
+                </ol>
+            </flux:card>
+        </div>
     </div>
-    {{-- Grup Tab --}}
-    <flux:tab.group class="mt-4">
-        <flux:tabs wire:model.live="tab">
-            <flux:tab name="administrasi">Review Administrasi</flux:tab>
-            <flux:tab name="penerbitan">Penerbitan SPK</flux:tab>
-            <flux:tab name="riwayat">Riwayat</flux:tab>
-        </flux:tabs>
+    {{-- [END] PERUBAHAN LAYOUT --}}
 
-        {{-- Panel untuk Tab "Perlu Diproses" --}}
-        <flux:tab.panel name="administrasi">
-            <flux:card class="mt-4">
-                <flux:table :paginate="$this->reviewAdministrasi">
-                    <flux:table.columns>
-                        <flux:table.column>Nama Mahasiswa</flux:table.column>
-                        <flux:table.column>Judul KP</flux:table.column>
-                        <flux:table.column>Berkas</flux:table.column>
-                        <flux:table.column>Aksi</flux:table.column>
-                    </flux:table.columns>
-                    <flux:table.rows>
-                        @forelse ($this->reviewAdministrasi as $kp)
-                            <flux:table.row :key="$kp->id">
-                                <flux:table.cell variant="strong">{{ $kp->mahasiswa->nama_mahasiswa }}</flux:table.cell>
-                                <flux:table.cell>{{ Str::limit($kp->judul_kp, 40) }}</flux:table.cell>
-                                <flux:table.cell>
-                                    <div class="flex items-center gap-2">
-                                        <flux:button as="a" href="{{ asset('storage/' . $kp->proposal_kp) }}" target="_blank" size="xs" icon="document-arrow-down">Proposal</flux:button>
-                                        <flux:button as="a" href="{{ asset('storage/' . $kp->surat_keterangan_kp) }}" target="_blank" size="xs" icon="document-arrow-down">Surat Ket.</flux:button>
-                                    </div>
-                                </flux:table.cell>
-                                <flux:table.cell>
-                                    <div class="flex items-center gap-2">
-                                        <flux:modal.trigger :name="'reject-kp-' . $kp->id">
-                                            <flux:button size="xs" variant="danger">Tolak</flux:button>
-                                        </flux:modal.trigger>
-                                        <flux:modal.trigger :name="'forward-kp-' . $kp->id">
-                                            <flux:button size="xs" variant="primary">Teruskan ke Komisi</flux:button>
-                                        </flux:modal.trigger>
-                                    </div>
-                                </flux:table.cell>
-                            </flux:table.row>
-
-                            {{-- Modal Konfirmasi Tolak --}}
-                            <flux:modal :name="'reject-kp-' . $kp->id" class="md:w-96">
-                                <div class="space-y-6 text-center">
-                                    <div class="mx-auto flex size-12 items-center justify-center rounded-full bg-red-100">
-                                        <flux:icon name="x-mark" class="size-6 text-red-600"/>
-                                    </div>
-                                    <div>
-                                        <flux:heading size="lg">Tolak Pengajuan KP?</flux:heading>
-                                        <flux:text class="mt-2">
-                                            Anda yakin ingin menolak pengajuan KP dari <span class="font-bold">{{ $kp->mahasiswa->nama_mahasiswa }}</span>?
-                                        </flux:text>
-                                    </div>
-                                    <div class="flex justify-center gap-3">
-                                        <flux:modal.close><flux:button variant="ghost">Batal</flux:button></flux:modal.close>
-                                        <flux:button variant="danger" wire:click="reject({{ $kp->id }})">Ya, Tolak</flux:button>
-                                    </div>
-                                </div>
-                            </flux:modal>
-
-                            {{-- Modal Konfirmasi Teruskan --}}
-                            <flux:modal :name="'forward-kp-' . $kp->id" class="md:w-96">
-                                <div class="space-y-6 text-center">
-                                    <div class="mx-auto flex size-12 items-center justify-center rounded-full bg-blue-100">
-                                        <flux:icon name="paper-airplane" class="size-6 text-blue-600" />
-                                    </div>
-                                    <div>
-                                        <flux:heading size="lg">Teruskan ke Komisi?</flux:heading>
-                                        <flux:text class="mt-2">
-                                            Anda yakin ingin meneruskan pengajuan KP ini untuk direview lebih lanjut oleh Komisi?
-                                        </flux:text>
-                                    </div>
-                                    <div class="flex justify-center gap-3">
-                                        <flux:modal.close><flux:button variant="ghost">Batal</flux:button></flux:modal.close>
-                                        <flux:button variant="primary" wire:click="forwardToKomisi({{ $kp->id }})">Ya, Teruskan</flux:button>
-                                    </div>
-                                </div>
-                            </flux:modal>
-                        @empty
-                            <flux:table.row>
-                                <flux:table.cell colspan="4" class="text-center text-neutral-500">
-                                    Tidak ada pengajuan KP yang perlu divalidasi.
-                                </flux:table.cell>
-                            </flux:table.row>
-                        @endforelse
-                    </flux:table.rows>
-                </flux:table>
-{{--                <div class="border-t p-4 dark:border-neutral-700">--}}
-{{--                    <Flux:pagination :paginator="$this->reviewAdministrasi"/>--}}
-{{--                </div>--}}
-            </flux:card>
-        </flux:tab.panel>
-
-        {{-- Panel BARU untuk Tab "Penerbitan SPK" --}}
-        <flux:tab.panel name="penerbitan">
-            <flux:card class="mt-4">
-                <flux:table :paginate="$this->penerbitanSpk">
-                    <flux:table.columns>
-                        <flux:table.column>Nama Mahasiswa</flux:table.column>
-                        <flux:table.column>Judul KP</flux:table.column>
-                        <flux:table.column>Tgl. Disetujui Komisi</flux:table.column>
-                        <flux:table.column>Aksi</flux:table.column>
-                    </flux:table.columns>
-                    <flux:table.rows>
-                        @forelse ($this->penerbitanSpk as $kp)
-                            <flux:table.row :key="$kp->id">
-                                <flux:table.cell variant="strong">{{ $kp->mahasiswa->nama_mahasiswa }}</flux:table.cell>
-                                <flux:table.cell>{{ Str::limit($kp->judul_kp, 40) }}</flux:table.cell>
-                                <flux:table.cell>{{ \Carbon\Carbon::parse($kp->tanggal_disetujui_kp)->format('d/m/Y') }}</flux:table.cell>
-                                <flux:table.cell>
-                                    <flux:button size="xs" variant="primary" wire:click="openSpkModal({{ $kp->id }})">
-                                        Terbitkan SPK
-                                    </flux:button>
-                                </flux:table.cell>
-                            </flux:table.row>
-                        @empty
-                            <flux:table.row>
-                                <flux:table.cell colspan="4" class="text-center text-neutral-500">
-                                    Tidak ada pengajuan yang perlu diterbitkan SPK-nya.
-                                </flux:table.cell>
-                            </flux:table.row>
-                        @endforelse
-                    </flux:table.rows>
-                </flux:table>
-{{--                <div class="border-t p-4 dark:border-neutral-700">--}}
-{{--                    <Flux:pagination :paginator="$this->penerbitanSpk"/>--}}
-{{--                </div>--}}
-            </flux:card>
-        </flux:tab.panel>
-        {{-- Panel untuk Tab "Riwayat Validasi" --}}
-        <flux:tab.panel name="riwayat">
-            <flux:card class="mt-4">
-                <flux:table :paginate="$this->riwayat">
-                    <flux:table.columns>
-                        <flux:table.column>Nama Mahasiswa</flux:table.column>
-                        <flux:table.column>Judul KP</flux:table.column>
-                        <flux:table.column>Status Pengajuan KP</flux:table.column>
-                        {{-- KOLOM BARU --}}
-                        <flux:table.column>Aksi</flux:table.column>
-                    </flux:table.columns>
-                    <flux:table.rows>
-                        @forelse ($this->riwayat as $kp)
-                            <flux:table.row :key="'riwayat-' . $kp->id">
-                                <flux:table.cell variant="strong">{{ $kp->mahasiswa->nama_mahasiswa }}</flux:table.cell>
-                                <flux:table.cell>{{ Str::limit($kp->judul_kp, 40) }}</flux:table.cell>
-                                <flux:table.cell>
-                                    @php
-                                        $color = match($kp->status_pengajuan_kp) {
-                                            'Diajukan' => 'yellow',
-                                            'Proses di Komisi' => 'blue',
-                                            'Disetujui' => 'green',
-                                            'Ditolak' => 'red',
-                                            'SPK Terbit' => 'emerald',
-                                            default => 'zinc',
-                                        };
-                                    @endphp
-                                    <flux:badge :color="$color" size="sm">{{ $kp->status_pengajuan_kp }}</flux:badge>
-                                </flux:table.cell>
-                                {{-- DATA BARU --}}
-                                <flux:table.cell>
-                                    @if ($kp->status_pengajuan_kp === 'SPK Terbit')
-                                        <flux:button
-                                            as="a"
-                                            href="{{ route('kp.export-spk', $kp->id) }}"
-                                            size="xs"
-                                            variant="ghost"
-                                            icon="arrow-down-tray">
-                                            Ekspor SPK
-                                        </flux:button>
-                                    @else
-                                        -
-                                    @endif
-                                </flux:table.cell>
-                            </flux:table.row>
-                        @empty
-                            <flux:table.row>
-                                <flux:table.cell colspan="4" class="text-center">Belum ada riwayat pengajuan KP.</flux:table.cell>
-                            </flux:table.row>
-                        @endforelse
-                    </flux:table.rows>
-                </flux:table>
-{{--                <div class="border-t p-4 dark:border-neutral-700">--}}
-{{--                    <Flux:pagination :paginator="$this->riwayat"/>--}}
-{{--                </div>--}}
-            </flux:card>
-        </flux:tab.panel>
-    </flux:tab.group>
-{{--     Modal BARU untuk menerbitkan SPK--}}
+    {{-- Modal untuk menerbitkan SPK--}}
     <flux:modal name="spk-modal" class="md:w-96">
         @if ($kpToIssueSpk)
             <div class="space-y-6">
                 <div>
                     <flux:heading size="lg">Penerbitan SPK</flux:heading>
-                    <flux:text class="mt-2">
-                        Input Nomor SPK untuk mahasiswa: <span class="font-bold">{{ $kpToIssueSpk->mahasiswa->nama_mahasiswa }}</span>.
-                    </flux:text>
+                    <flux:text class="mt-2">Input Nomor SPK untuk mahasiswa: <span class="font-bold">{{ $kpToIssueSpk->mahasiswa->nama_mahasiswa }}</span>.</flux:text>
                 </div>
                 <div>
-                    {{-- INPUT BARU --}}
                     <flux:input wire:model="nomor_spk" label="Nomor SPK" required />
                 </div>
                 <div class="flex justify-end gap-3">

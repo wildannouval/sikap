@@ -34,6 +34,7 @@ new #[Title('Nilai Akhir KP')] #[Layout('components.layouts.app')] class extends
     public function removeDistribusi()
     {
         $this->berkas_distribusi = null;
+        $this->resetErrorBag('berkas_distribusi');
     }
 
     public function uploadDistribusi()
@@ -58,89 +59,109 @@ new #[Title('Nilai Akhir KP')] #[Layout('components.layouts.app')] class extends
             Flux::modal('confirm-distribusi-modal')->close();
             Flux::toast(variant: 'success', heading: 'Berhasil', text: 'Bukti distribusi laporan berhasil diunggah. Selamat, KP Anda telah selesai!');
 
+            // Refresh data KP untuk menampilkan status terbaru
             $this->kerjaPraktek = $this->kerjaPraktek->fresh(['seminar', 'dosenPembimbing', 'distribusi']);
         }
     }
 }; ?>
 
 <div>
-    <flux:heading size="xl" level="1">Nilai Akhir Kerja Praktik</flux:heading>
+    <div class="mb-6">
+        <flux:heading size="xl" level="1">Nilai Akhir Kerja Praktik</flux:heading>
+        <flux:subheading size="lg">Hasil akhir dari pelaksanaan Kerja Praktik Anda.</flux:subheading>
+    </div>
 
     @if ($kerjaPraktek && $kerjaPraktek->seminar)
-        <flux:subheading size="lg" class="mb-6">Hasil akhir dari pelaksanaan Kerja Praktik Anda.</flux:subheading>
-        <flux:separator variant="subtle"/>
-
-        {{-- Kartu Nilai --}}
-        <flux:card class="mt-8">
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <div class="md:col-span-2 space-y-4">
-                    <div>
-                        <flux:label>Judul KP</flux:label>
-                        <p class="font-semibold">{{ $kerjaPraktek->seminar->judul_kp_final }}</p>
-                    </div>
-                    <div>
-                        <flux:label>Dosen Pembimbing</flux:label>
-                        <p class="font-semibold">{{ $kerjaPraktek->dosenPembimbing->nama_dosen }}</p>
-                    </div>
-                    <div>
-                        @if($kerjaPraktek->seminar->berita_acara_signed)
-                            <flux:button as="a" href="{{ asset('storage/' . $kerjaPraktek->seminar->berita_acara_signed) }}" target="_blank" variant="ghost" icon="document-arrow-down">
-                                Unduh Berita Acara
-                            </flux:button>
-                        @endif
-                    </div>
-                </div>
-                <div class="flex flex-col items-center justify-center rounded-xl bg-green-50 p-6 dark:bg-green-900/20">
-                    <flux:label>Nilai Akhir</flux:label>
-                    {{-- PERBAIKAN: Menggunakan kolom nilai_akhir --}}
-                    <p class="text-6xl font-bold text-green-600">{{ $kerjaPraktek->seminar->nilai_akhir }}</p>
-                </div>
-            </div>
-        </flux:card>
-
-        {{-- Kartu Upload Bukti Distribusi (DIPERBARUI) --}}
-        <div class="mt-8">
-            <flux:heading size="lg">Upload Bukti Distribusi Laporan</flux:heading>
-            <flux:card class="mt-4">
-                @if ($kerjaPraktek->distribusi)
-                    {{-- Tampilan jika sudah upload (tidak berubah) --}}
-                    <div class="text-center">
-                        <flux:icon name="check-circle" class="mx-auto size-12 text-green-500" />
-                        <p class="mt-4 font-semibold">Anda sudah mengunggah bukti distribusi laporan.</p>
-                        <p class="text-sm">Selamat! Seluruh rangkaian Kerja Praktik Anda telah selesai.</p>
-                        <p class="text-sm text-zinc-600 dark:text-zinc-400">
-                            Diunggah pada: {{ \Carbon\Carbon::parse($kerjaPraktek->distribusi->tanggal_distribusi)->format('d F Y') }}
-                        </p>
-                        <flux:button as="a" href="{{ asset('storage/' . $kerjaPraktek->distribusi->berkas_distribusi) }}" target="_blank" variant="ghost" class="!text-indigo-600 !p-0 hover:underline mt-2">
-                            Lihat File
-                        </flux:button>
-                    </div>
-                @else
-                    {{-- PERBAIKAN: Form sekarang menggunakan modal konfirmasi --}}
-                    <div class="space-y-4">
-                        <p class="text-sm">Silakan unggah bukti distribusi laporan (misal: lembar pengesahan) dalam format PDF untuk menyelesaikan seluruh rangkaian Kerja Praktik.</p>
-                        <div>
-                            <flux:input wire:model="berkas_distribusi" type="file" required />
-                            @if ($berkas_distribusi)
-                                <div class="mt-1 flex items-center justify-between rounded-lg border bg-zinc-50 p-2 text-sm dark:border-zinc-700 dark:bg-zinc-800">
-                                    <span>File dipilih: {{ $berkas_distribusi->getClientOriginalName() }}</span>
-                                    <button type="button" wire:click="removeDistribusi" class="text-red-500 hover:text-red-700 font-bold text-lg">&times;</button>
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
+            <div class="lg:col-span-2 space-y-8">
+                <flux:card>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+                        <div class="md:col-span-2 space-y-6">
+                            <h3 class="text-lg font-semibold">Rincian Penilaian</h3>
+                            <div class="space-y-4">
+                                <div class="flex justify-between items-center p-3 bg-zinc-50 dark:bg-zinc-800 rounded-lg">
+                                    <span class="text-sm text-zinc-600 dark:text-zinc-400">Nilai Dosen Pembimbing</span>
+                                    <span class="font-bold text-lg">{{ $kerjaPraktek->seminar->nilai_dosen_pembimbing ?? 'N/A' }}</span>
                                 </div>
-                            @endif
-                            @error('berkas_distribusi') <span class="text-sm text-red-500 mt-1">{{ $message }}</span> @enderror
+                                <div class="flex justify-between items-center p-3 bg-zinc-50 dark:bg-zinc-800 rounded-lg">
+                                    <span class="text-sm text-zinc-600 dark:text-zinc-400">Nilai Pembimbing Lapangan</span>
+                                    <span class="font-bold text-lg">{{ $kerjaPraktek->seminar->nilai_pembimbing_lapangan ?? 'N/A' }}</span>
+                                </div>
+                            </div>
                         </div>
-                        <div class="flex justify-end">
-                            {{-- Tombol ini sekarang membuka modal, dan hanya aktif jika file sudah dipilih --}}
-                            <flux:modal.trigger name="confirm-distribusi-modal">
-                                <flux:button type="button" variant="primary" :disabled="!$berkas_distribusi">
-                                    Upload
-                                </flux:button>
-                            </flux:modal.trigger>
+                        <div class="flex flex-col items-center justify-center rounded-xl bg-green-50 p-6 dark:bg-green-900/20 border border-green-200 dark:border-green-800">
+                            <flux:label>Nilai Akhir (Indeks)</flux:label>
+                            <p class="text-7xl font-bold text-green-600 dark:text-green-400">{{ $kerjaPraktek->seminar->nilai_akhir }}</p>
                         </div>
                     </div>
-                @endif
-            </flux:card>
+                </flux:card>
+
+                <flux:card>
+                    @if ($kerjaPraktek->distribusi)
+                        <div class="text-center p-6">
+                            <flux:icon name="check-badge" class="mx-auto size-12 text-green-500" />
+                            <h3 class="mt-4 text-lg font-semibold">Proses KP Telah Selesai</h3>
+                            <p class="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
+                                Anda telah mengunggah bukti distribusi laporan pada 
+                                <span class="font-semibold">{{ \Carbon\Carbon::parse($kerjaPraktek->distribusi->tanggal_distribusi)->isoFormat('D MMMM Y') }}</span>.
+                                <br>
+                                Selamat, seluruh rangkaian Kerja Praktik Anda telah berakhir!
+                            </p>
+                            {{-- [FIX] Mengganti variant="secondary" menjadi "ghost" --}}
+                            <flux:button as="a" href="{{ asset('storage/' . $kerjaPraktek->distribusi->berkas_distribusi) }}" target="_blank" variant="ghost" class="mt-4" icon="eye">
+                                Lihat Bukti Unggahan
+                            </flux:button>
+                        </div>
+                    @else
+                        <div class="space-y-4">
+                            <h3 class="text-lg font-semibold">Langkah Terakhir: Upload Bukti Distribusi</h3>
+                            <p class="text-sm text-zinc-600 dark:text-zinc-400">Untuk menyelesaikan seluruh administrasi KP, silakan unggah bukti distribusi laporan (misalnya: lembar pengesahan yang sudah ditandatangani) dalam format PDF.</p>
+                            <div>
+                                <flux:input wire:model="berkas_distribusi" type="file" required />
+                                @if ($berkas_distribusi && !$errors->has('berkas_distribusi'))
+                                    <div class="mt-2 flex items-center justify-between rounded-lg border bg-zinc-50 p-2 text-sm dark:border-zinc-700 dark:bg-zinc-800">
+                                        <span class="truncate">{{ $berkas_distribusi->getClientOriginalName() }}</span>
+                                        <button type="button" wire:click="removeDistribusi" class="text-red-500 hover:text-red-700 font-bold text-lg flex-shrink-0 ml-2">&times;</button>
+                                    </div>
+                                @endif
+                                @error('berkas_distribusi') <span class="text-sm text-red-500 mt-1">{{ $message }}</span> @enderror
+                            </div>
+                            <div class="flex justify-end">
+                                <flux:modal.trigger name="confirm-distribusi-modal">
+                                    <flux:button type="button" variant="primary" :disabled="!$berkas_distribusi">
+                                        Upload Bukti
+                                    </flux:button>
+                                </flux:modal.trigger>
+                            </div>
+                        </div>
+                    @endif
+                </flux:card>
+            </div>
+
+            <div class="lg:col-span-1 space-y-8">
+                <flux:card>
+                     <h3 class="text-lg font-semibold mb-4">Informasi Kerja Praktik</h3>
+                     <div class="space-y-4 text-sm">
+                        <div>
+                            <flux:label>Judul KP</flux:label>
+                            <p class="font-semibold">{{ $kerjaPraktek->seminar->judul_kp_final }}</p>
+                        </div>
+                        <div>
+                            <flux:label>Dosen Pembimbing</flux:label>
+                            <p class="font-semibold">{{ $kerjaPraktek->dosenPembimbing->nama_dosen }}</p>
+                        </div>
+                        <div>
+                            @if($kerjaPraktek->seminar->berita_acara_signed)
+                                <flux:button as="a" href="{{ asset('storage/' . $kerjaPraktek->seminar->berita_acara_signed) }}" target="_blank" variant="ghost" icon="document-arrow-down">
+                                    Unduh Berita Acara
+                                </flux:button>
+                            @endif
+                        </div>
+                     </div>
+                </flux:card>
+            </div>
         </div>
+
     @else
         <flux:separator variant="subtle" class="my-6"/>
         <flux:card class="mt-8 text-center">
@@ -153,7 +174,6 @@ new #[Title('Nilai Akhir KP')] #[Layout('components.layouts.app')] class extends
         </flux:card>
     @endif
 
-    {{-- Modal BARU untuk konfirmasi upload distribusi --}}
     <flux:modal name="confirm-distribusi-modal" class="md:w-96">
         <div class="space-y-6 text-center">
             <div class="mx-auto flex size-12 items-center justify-center rounded-full bg-blue-100">
@@ -167,7 +187,7 @@ new #[Title('Nilai Akhir KP')] #[Layout('components.layouts.app')] class extends
             </div>
             <div class="flex justify-center gap-3">
                 <flux:modal.close><flux:button variant="ghost">Batal</flux:button></flux:modal.close>
-                <flux:button variant="primary" wire:click="uploadDistribusi">Ya, Upload Sekarang</flux:button>
+                <flux:button variant="primary" wire:click="uploadDistribusi">Ya, Selesaikan KP</flux:button>
             </div>
         </div>
     </flux:modal>

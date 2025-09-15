@@ -32,19 +32,11 @@ new #[Title('Penilaian KP')] #[Layout('components.layouts.app')] class extends C
     public ?Seminar $seminarToGrade = null;
     public $berita_acara_signed;
 
-    // Properti BARU untuk komponen nilai
     public array $nilaiLapangan = [];
     public array $nilaiPembimbing = [];
     public float $nilaiAngkaFinal = 0;
     public string $nilaiHurufFinal = '';
 
-    // Properti untuk komponen nilai
-    //    public ?float $nilai_lapangan = null;
-    //    public ?float $nilai_dosen = null;
-    //    public float $nilai_angka_final = 0;
-    //    public string $nilai_akhir = '';
-
-    // Daftar komponen penilaian
     public array $komponenLapangan = [
         'kesesuaian' => 'Kesesuaian dengan rencana kerja',
         'kehadiran' => 'Kehadiran di lokasi Kerja praktek',
@@ -64,18 +56,16 @@ new #[Title('Penilaian KP')] #[Layout('components.layouts.app')] class extends C
         'diskusi' => 'Diskusi',
     ];
 
-    // Hook yang berjalan setiap kali ada perubahan pada nilai
     public function updated($property)
     {
         if (Str::startsWith($property, ['nilaiLapangan', 'nilaiPembimbing'])) {
             $this->calculateFinalGrade();
         }
-        if ($property === 'search') {
+        if ($property === 'search' || $property === 'tab') {
             $this->resetPage();
         }
     }
 
-    // Fungsi untuk menghitung nilai akhir secara otomatis
     public function calculateFinalGrade()
     {
         $totalNilaiLapangan = 0;
@@ -100,7 +90,6 @@ new #[Title('Penilaian KP')] #[Layout('components.layouts.app')] class extends C
 
         $this->nilaiAngkaFinal = ($rataRataLapangan * 0.4) + ($rataRataPembimbing * 0.6);
 
-        // Konversi ke nilai huruf
         $nilai = $this->nilaiAngkaFinal;
         if ($nilai >= 80) $this->nilaiHurufFinal = 'A';
         elseif ($nilai >= 75) $this->nilaiHurufFinal = 'AB';
@@ -118,7 +107,6 @@ new #[Title('Penilaian KP')] #[Layout('components.layouts.app')] class extends C
         $this->reset(['nilaiLapangan', 'nilaiPembimbing', 'nilaiAngkaFinal', 'nilaiHurufFinal', 'berita_acara_signed']);
         $this->resetErrorBag();
 
-        // Isi form dengan data yang sudah ada jika melakukan edit
         foreach ($this->seminarToGrade->penilaians as $penilaian) {
             if ($penilaian->tipe === 'lapangan') {
                 $this->nilaiLapangan[$penilaian->nama_komponen] = $penilaian->nilai;
@@ -126,110 +114,57 @@ new #[Title('Penilaian KP')] #[Layout('components.layouts.app')] class extends C
                 $this->nilaiPembimbing[$penilaian->nama_komponen] = $penilaian->nilai;
             }
         }
-        $this->calculateFinalGrade(); // Hitung ulang nilai saat modal dibuka
-
+        $this->calculateFinalGrade();
         Flux::modal('grade-modal')->show();
     }
 
     public function saveGrade()
     {
-        // Validasi untuk semua input nilai komponen
         $validated = $this->validate([
             'nilaiLapangan.*' => 'required|numeric|min:0|max:100',
             'nilaiPembimbing.*' => 'required|numeric|min:0|max:100',
         ]);
-
-        // Validasi file berita acara secara terpisah dan kondisional
-        // File hanya wajib diisi jika belum ada sama sekali
         if (!$this->seminarToGrade->berita_acara_signed && !$this->berita_acara_signed) {
             $this->addError('berita_acara_signed', 'Berkas berita acara wajib diunggah.');
             return;
         }
 
         if ($this->seminarToGrade) {
-            // Gunakan transaksi untuk memastikan semua data tersimpan dengan benar
             DB::transaction(function () {
-                // Hapus nilai komponen lama untuk diganti dengan yang baru (saat edit)
                 $this->seminarToGrade->penilaians()->delete();
-
-                // Simpan setiap komponen nilai lapangan ke tabel 'penilaians'
                 foreach ($this->nilaiLapangan as $komponen => $nilai) {
-                    Penilaian::create([
-                        'seminar_id' => $this->seminarToGrade->id,
-                        'nama_komponen' => $komponen,
-                        'nilai' => $nilai,
-                        'tipe' => 'lapangan',
-                    ]);
+                    Penilaian::create(['seminar_id' => $this->seminarToGrade->id, 'nama_komponen' => $komponen, 'nilai' => $nilai, 'tipe' => 'lapangan']);
                 }
-
-                // Simpan setiap komponen nilai pembimbing ke tabel 'penilaians'
                 foreach ($this->nilaiPembimbing as $komponen => $nilai) {
-                    Penilaian::create([
-                        'seminar_id' => $this->seminarToGrade->id,
-                        'nama_komponen' => $komponen,
-                        'nilai' => $nilai,
-                        'tipe' => 'pembimbing',
-                    ]);
+                    Penilaian::create(['seminar_id' => $this->seminarToGrade->id, 'nama_komponen' => $komponen, 'nilai' => $nilai, 'tipe' => 'pembimbing']);
                 }
-
-                // Siapkan data update untuk tabel seminar
                 $updateData = [
                     'status_seminar' => 'Dinilai',
                     'nilai_pembimbing_lapangan' => round(collect($this->nilaiLapangan)->avg(), 2),
                     'nilai_dosen_pembimbing' => round(collect($this->nilaiPembimbing)->avg(), 2),
                     'nilai_akhir' => $this->nilaiHurufFinal,
                 ];
-
-                // Cek apakah ada file baru yang diunggah untuk menggantikan yang lama
                 if ($this->berita_acara_signed) {
-                    // Validasi file yang baru diunggah
                     $this->validate(['berita_acara_signed' => 'file|mimes:pdf|max:2048']);
-
-                    // Hapus file lama jika ada
                     if ($this->seminarToGrade->berita_acara_signed) {
                         Storage::disk('public')->delete($this->seminarToGrade->berita_acara_signed);
                     }
-                    // Simpan file baru dan tambahkan path ke data update
                     $updateData['berita_acara_signed'] = $this->berita_acara_signed->store('berita-acara-signed', 'public');
                 }
-
-                // Update data utama di tabel seminar
                 $this->seminarToGrade->update($updateData);
-
-                // Kirim notifikasi ke mahasiswa
                 $this->seminarToGrade->kerjaPraktek->mahasiswa->user->notify(new \App\Notifications\SeminarDinilai($this->seminarToGrade));
             });
-
             Flux::modal('grade-modal')->close();
             Flux::toast(variant: 'success', heading: 'Berhasil', text: 'Penilaian seminar telah disimpan.');
         }
     }
-
-    // Hook BARU untuk reset paginasi
-    public function updatedSearch()
-    {
-        $this->resetPage();
-    }
-
-    // Fungsi BARU untuk sorting
-    public function sortBy($field)
-    {
-        if ($this->sortField === $field) {
-            $this->sortDirection = $this->sortDirection === 'asc' ? 'desc' : 'asc';
-        } else {
-            $this->sortField = $field;
-            $this->sortDirection = 'asc';
-        }
-    }
-
-    // Base query BARU untuk menghindari duplikasi
+    
     private function getBaseQuery()
     {
         $dosenId = Auth::user()->dosen?->id;
         if (!$dosenId) {
-            return KerjaPraktek::where('id', -1); // Kembalikan query kosong
+            return KerjaPraktek::where('id', -1);
         }
-
         return KerjaPraktek::with('mahasiswa', 'seminar')
             ->where('dosen_pembimbing_id', $dosenId)
             ->when($this->search, function ($query) {
@@ -238,16 +173,12 @@ new #[Title('Penilaian KP')] #[Layout('components.layouts.app')] class extends C
             })
             ->orderBy($this->sortField, $this->sortDirection);
     }
-
-    /**
-     * Data untuk tab "Perlu Dinilai".
-     * Mengambil data KP yang seminarnya sudah Dijadwalkan.
-     */
+    
     #[Computed]
     public function perluDinilai()
     {
         return $this->getBaseQuery()
-            ->whereHas('seminar', fn($q) => $q->where('status_seminar', 'Dijadwalkan'))
+            ->whereHas('seminar', fn($q) => $q->whereIn('status_seminar', ['Dijadwalkan', 'Selesai']))
             ->paginate(10, ['*'], 'nilaiPage');
     }
 
@@ -261,147 +192,172 @@ new #[Title('Penilaian KP')] #[Layout('components.layouts.app')] class extends C
 }; ?>
 
 <div>
-    {{-- Header Halaman --}}
-    <flux:heading size="xl" level="1">Penilaian Kerja Praktik</flux:heading>
-    <flux:subheading size="lg" class="mb-6">Upload berita acara dan input nilai akhir seminar mahasiswa.
-    </flux:subheading>
-    <flux:separator variant="subtle"/>
-
-    {{-- Input Search BARU --}}
-    <div class="mt-6 flex">
-        <div class="flex-1">
-            <flux:input wire:model.live.debounce.300ms="search"
-                        placeholder="Cari berdasarkan nama mahasiswa atau judul KP..." icon="magnifying-glass"/>
-        </div>
+    <div class="mb-6">
+        <flux:heading size="xl" level="1">Penilaian Kerja Praktik</flux:heading>
+        <flux:subheading size="lg">Upload berita acara dan input nilai akhir seminar mahasiswa bimbingan Anda.</flux:subheading>
     </div>
 
-    <flux:tab.group class="mt-4">
-        <flux:tabs wire:model.live="tab">
-            <flux:tab name="penilaian">Perlu Dinilai</flux:tab>
-            <flux:tab name="riwayat">Riwayat Penilaian</flux:tab>
-        </flux:tabs>
-
-        <flux:tab.panel name="penilaian">
-            <flux:card class="mt-4">
-                <flux:table :paginate="$this->perluDinilai">
-                    <flux:table.columns>
-                        <flux:table.column>Nama Mahasiswa</flux:table.column>
-                        <flux:table.column>Judul KP</flux:table.column>
-                        <flux:table.column class="cursor-pointer" wire:click="sortBy('seminars.tanggal_seminar')">Tgl.
-                            Seminar
-                        </flux:table.column>
-                        <flux:table.column>Aksi</flux:table.column>
-                    </flux:table.columns>
-                    <flux:table.rows>
-                        @forelse ($this->perluDinilai as $kp)
-                            <flux:table.row :key="$kp->id">
-                                <flux:table.cell variant="strong">{{ $kp->mahasiswa->nama_mahasiswa }}</flux:table.cell>
-                                <flux:table.cell>{{ Str::limit($kp->seminar->judul_kp_final, 40) }}</flux:table.cell>
-                                <flux:table.cell>{{ \Carbon\Carbon::parse($kp->seminar->tanggal_seminar)->format('d/m/Y') }}</flux:table.cell>
-                                <flux:table.cell>
-                                    <flux:button size="xs" variant="primary"
-                                                 wire:click="openGradeModal({{ $kp->seminar->id }})">
-                                        Beri Penilaian
-                                    </flux:button>
-                                </flux:table.cell>
-                            </flux:table.row>
-                        @empty
-                            <flux:table.row>
-                                <flux:table.cell colspan="4" class="text-center">Tidak ada seminar yang perlu dinilai.
-                                </flux:table.cell>
-                            </flux:table.row>
-                        @endforelse
-                    </flux:table.rows>
-                </flux:table>
+    {{-- [START] PERUBAHAN LAYOUT MENJADI DUA KOLOM --}}
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
+        
+        {{-- Kolom Kiri (Utama): Tabel dan Tab --}}
+        <div class="lg:col-span-2 space-y-6">
+            <flux:input wire:model.live.debounce.300ms="search" placeholder="Cari mahasiswa atau judul KP..." icon="magnifying-glass" />
+            
+            <flux:tab.group>
+                <flux:tabs wire:model.live="tab">
+                    <flux:tab name="penilaian">Perlu Dinilai</flux:tab>
+                    <flux:tab name="riwayat">Riwayat Penilaian</flux:tab>
+                </flux:tabs>
+        
+                <flux:tab.panel name="penilaian">
+                    <flux:card class="mt-4">
+                        <flux:table :paginate="$this->perluDinilai">
+                            <flux:table.columns>
+                                <flux:table.column>Nama Mahasiswa</flux:table.column>
+                                <flux:table.column>Judul KP</flux:table.column>
+                                <flux:table.column>Tgl. Seminar</flux:table.column>
+                                <flux:table.column>Aksi</flux:table.column>
+                            </flux:table.columns>
+                            <flux:table.rows>
+                                @forelse ($this->perluDinilai as $kp)
+                                    <flux:table.row :key="$kp->id">
+                                        <flux:table.cell variant="strong">{{ $kp->mahasiswa->nama_mahasiswa }}</flux:table.cell>
+                                        <flux:table.cell>{{ Str::limit($kp->seminar->judul_kp_final, 40) }}</flux:table.cell>
+                                        <flux:table.cell>{{ \Carbon\Carbon::parse($kp->seminar->tanggal_seminar)->format('d/m/Y') }}</flux:table.cell>
+                                        <flux:table.cell>
+                                            <flux:button size="xs" variant="primary" wire:click="openGradeModal({{ $kp->seminar->id }})">
+                                                Beri Penilaian
+                                            </flux:button>
+                                        </flux:table.cell>
+                                    </flux:table.row>
+                                @empty
+                                    <flux:table.row>
+                                        <flux:table.cell colspan="4" class="text-center py-12 text-zinc-500">
+                                            Tidak ada seminar yang perlu dinilai.
+                                        </flux:table.cell>
+                                    </flux:table.row>
+                                @endforelse
+                            </flux:table.rows>
+                        </flux:table>
+                    </flux:card>
+                </flux:tab.panel>
+        
+                <flux:tab.panel name="riwayat">
+                    <flux:card class="mt-4">
+                        <flux:table :paginate="$this->riwayatPenilaian">
+                            <flux:table.columns>
+                                <flux:table.column>Nama Mahasiswa</flux:table.column>
+                                <flux:table.column>Judul KP</flux:table.column>
+                                <flux:table.column>Nilai Akhir</flux:table.column>
+                                <flux:table.column>Aksi</flux:table.column>
+                            </flux:table.columns>
+                            <flux:table.rows>
+                                @forelse ($this->riwayatPenilaian as $kp)
+                                    <flux:table.row :key="'riwayat-' . $kp->id">
+                                        <flux:table.cell variant="strong">{{ $kp->mahasiswa->nama_mahasiswa }}</flux:table.cell>
+                                        <flux:table.cell>{{ Str::limit($kp->seminar->judul_kp_final, 40) }}</flux:table.cell>
+                                        <flux:table.cell>
+                                            <flux:badge color="green" size="sm">{{ $kp->seminar->nilai_akhir }}</flux:badge>
+                                        </flux:table.cell>
+                                        <flux:table.cell>
+                                            <flux:button size="xs" wire:click="openGradeModal({{ $kp->seminar->id }})">
+                                                Edit Nilai
+                                            </flux:button>
+                                        </flux:table.cell>
+                                    </flux:table.row>
+                                @empty
+                                    <flux:table.row>
+                                        <flux:table.cell colspan="4" class="text-center py-12 text-zinc-500">
+                                            Belum ada riwayat penilaian.
+                                        </flux:table.cell>
+                                    </flux:table.row>
+                                @endforelse
+                            </flux:table.rows>
+                        </flux:table>
+                    </flux:card>
+                </flux:tab.panel>
+            </flux:tab.group>
+        </div>
+        
+        {{-- Kolom Kanan (Informasi) --}}
+        <div class="lg:col-span-1 space-y-8">
+            <flux:card>
+                <h3 class="text-lg font-semibold mb-4">Alur Kerja Penilaian</h3>
+                <ol class="list-decimal list-inside space-y-4 text-sm text-zinc-600 dark:text-zinc-400">
+                    <li>
+                        <b>Pilih Mahasiswa:</b><br>
+                        Di tab "Perlu Dinilai", klik tombol "Beri Penilaian" untuk mahasiswa yang seminarnya telah selesai dilaksanakan.
+                    </li>
+                    <li>
+                        <b>Input Nilai:</b><br>
+                        Isi semua komponen nilai, baik dari Pembimbing Lapangan maupun dari Anda sebagai Dosen Pembimbing. Nilai angka dan huruf final akan terhitung otomatis.
+                    </li>
+                    <li>
+                        <b>Unggah Berita Acara:</b><br>
+                        Unggah Berita Acara (BAP) yang telah ditandatangani dalam format PDF.
+                    </li>
+                    <li>
+                        <b>Simpan Penilaian:</b><br>
+                        Klik "Simpan Nilai" untuk menyelesaikan. Data akan pindah ke tab "Riwayat Penilaian" dan mahasiswa akan mendapat notifikasi.
+                    </li>
+                </ol>
             </flux:card>
-        </flux:tab.panel>
-
-        <flux:tab.panel name="riwayat">
-            <flux:card class="mt-4">
-                <flux:table :paginate="$this->riwayatPenilaian">
-                    <flux:table.columns>
-                        <flux:table.column>Nama Mahasiswa</flux:table.column>
-                        <flux:table.column>Judul KP</flux:table.column>
-                        <flux:table.column>Nilai Akhir</flux:table.column>
-                        <flux:table.column>Aksi</flux:table.column>
-                    </flux:table.columns>
-                    <flux:table.rows>
-                        @forelse ($this->riwayatPenilaian as $kp)
-                            <flux:table.row :key="'riwayat-' . $kp->id">
-                                <flux:table.cell variant="strong">{{ $kp->mahasiswa->nama_mahasiswa }}</flux:table.cell>
-                                <flux:table.cell>{{ Str::limit($kp->seminar->judul_kp_final, 40) }}</flux:table.cell>
-                                <flux:table.cell>
-                                    {{-- PERBAIKAN: Ganti nilai_seminar menjadi nilai_akhir --}}
-                                    <flux:badge color="green" size="sm">{{ $kp->seminar->nilai_akhir }}</flux:badge>
-                                </flux:table.cell>
-                                <flux:table.cell>
-                                    <flux:button size="xs" wire:click="openGradeModal({{ $kp->seminar->id }})">
-                                        Edit Nilai
-                                    </flux:button>
-                                </flux:table.cell>
-                            </flux:table.row>
-                        @empty
-                            <flux:table.row>
-                                <flux:table.cell colspan="4" class="text-center">Belum ada riwayat penilaian.
-                                </flux:table.cell>
-                            </flux:table.row>
-                        @endforelse
-                    </flux:table.rows>
-                </flux:table>
+             <flux:card>
+                <h3 class="text-lg font-semibold mb-4">Bobot Nilai</h3>
+                <div class="space-y-3 text-sm">
+                    <div class="flex justify-between items-center p-3 bg-zinc-50 dark:bg-zinc-800 rounded-lg">
+                        <span class="text-zinc-600 dark:text-zinc-400">Pembimbing Lapangan</span>
+                        <span class="font-bold text-lg">40%</span>
+                    </div>
+                     <div class="flex justify-between items-center p-3 bg-zinc-50 dark:bg-zinc-800 rounded-lg">
+                        <span class="text-zinc-600 dark:text-zinc-400">Dosen Pembimbing</span>
+                        <span class="font-bold text-lg">60%</span>
+                    </div>
+                </div>
             </flux:card>
-        </flux:tab.panel>
-    </flux:tab.group>
+        </div>
+    </div>
+    {{-- [END] PERUBAHAN LAYOUT --}}
 
-    {{-- Modal untuk Memberi Nilai (DIPERBARUI) --}}
     <flux:modal name="grade-modal" class="md:w-[36rem]">
         @if ($seminarToGrade)
             <div class="space-y-6">
                 <div>
-                    <flux:heading size="lg">{{ $seminarToGrade->nilai_akhir ? 'Edit' : 'Input' }} Nilai Seminar
-                    </flux:heading>
+                    <flux:heading size="lg">{{ $seminarToGrade->nilai_akhir ? 'Edit' : 'Input' }} Nilai Seminar</flux:heading>
                     <flux:text class="mt-2">
-                        Mahasiswa: <span
-                            class="font-bold">{{ $seminarToGrade->kerjaPraktek->mahasiswa->nama_mahasiswa }}</span>
+                        Mahasiswa: <span class="font-bold">{{ $seminarToGrade->kerjaPraktek->mahasiswa->nama_mahasiswa }}</span>
                     </flux:text>
                 </div>
-                <div class="space-y-6">
-                    {{-- Nilai Pembimbing Lapangan --}}
+                <div class="space-y-6 max-h-[60vh] overflow-y-auto pr-2">
                     <flux:card class="space-y-4">
                         <h4 class="font-semibold">Komponen Penilaian Pembimbing Lapangan (Bobot 40%)</h4>
                         @foreach($komponenLapangan as $key => $label)
-                            <flux:input wire:model.live="nilaiLapangan.{{ $key }}" type="number" step="1" min="0"
-                                        max="100" :label="$label" required/>
+                            <flux:input wire:model.live="nilaiLapangan.{{ $key }}" type="number" step="1" min="0" max="100" :label="$label" required/>
                         @endforeach
                     </flux:card>
-
-                    {{-- Nilai Dosen Pembimbing --}}
                     <flux:card class="space-y-4">
                         <h4 class="font-semibold">Komponen Penilaian Dosen Pembimbing (Bobot 60%)</h4>
                         @foreach($komponenPembimbing as $key => $label)
-                            <flux:input wire:model.live="nilaiPembimbing.{{ $key }}" type="number" step="1" min="0"
-                                        max="100" :label="$label" required/>
+                            <flux:input wire:model.live="nilaiPembimbing.{{ $key }}" type="number" step="1" min="0" max="100" :label="$label" required/>
                         @endforeach
                     </flux:card>
-
-                    {{-- Upload Berita Acara & Hasil Akhir --}}
                     <flux:card class="space-y-4">
                         <h4 class="font-semibold">Berkas & Hasil Akhir</h4>
                         <flux:input wire:model="berita_acara_signed" type="file"
                                     :label="$seminarToGrade->berita_acara_signed ? 'Ganti Berita Acara (Opsional)' : 'Upload Berita Acara (TTD)'"
                                     helper="File PDF, maks 2MB." :required="!$seminarToGrade->berita_acara_signed"/>
-
+                        
                         <div class="grid grid-cols-2 gap-4 pt-2">
                             <div>
                                 <flux:label>Nilai Angka Final</flux:label>
-                                <div
-                                    class="mt-1 flex h-10 w-full items-center rounded-md border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-800">
+                                <div class="mt-1 flex h-10 w-full items-center rounded-md border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-800">
                                     {{ number_format($nilaiAngkaFinal, 2) }}
                                 </div>
                             </div>
                             <div>
                                 <flux:label>Nilai Huruf Final</flux:label>
-                                <div
-                                    class="mt-1 flex h-10 w-full items-center justify-center rounded-md border border-zinc-200 bg-zinc-50 px-3 py-2 text-2xl font-bold dark:border-zinc-700 dark:bg-zinc-800">
+                                <div class="mt-1 flex h-10 w-full items-center justify-center rounded-md border border-zinc-200 bg-zinc-50 px-3 py-2 text-2xl font-bold dark:border-zinc-700 dark:bg-zinc-800">
                                     {{ $nilaiHurufFinal ?: '-' }}
                                 </div>
                             </div>

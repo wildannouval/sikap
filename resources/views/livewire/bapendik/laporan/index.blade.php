@@ -26,11 +26,10 @@ new #[Title('Laporan & Arsip KP')] #[Layout('components.layouts.app')] class ext
     #[Url]
     public ?int $jurusanFilter = null;
     #[Url]
-    public string $sortField = 'tanggal_pengajuan_kp'; // <-- Diubah ke tanggal_pengajuan_kp
+    public string $sortField = 'tanggal_pengajuan_kp';
     #[Url]
     public string $sortDirection = 'desc';
 
-    // PERBAIKAN: Menggunakan DateRange dengan benar
     #[Url]
     public ?DateRange $dateRange = null;
 
@@ -86,7 +85,6 @@ new #[Title('Laporan & Arsip KP')] #[Layout('components.layouts.app')] class ext
             ->when($this->jurusanFilter, function ($query) {
                 $query->whereHas('mahasiswa', fn($q) => $q->where('jurusan_id', $this->jurusanFilter));
             })
-            // PERBAIKAN: Logika filter tanggal disesuaikan dengan DateRange
             ->when($this->dateRange && $this->dateRange->start() && $this->dateRange->end(), function ($query) {
                 $query->whereBetween('tanggal_pengajuan_kp', [
                     $this->dateRange->start()->startOfDay(),
@@ -104,17 +102,13 @@ new #[Title('Laporan & Arsip KP')] #[Layout('components.layouts.app')] class ext
         $user = Auth::user();
         $query = Distribusi::with(['mahasiswa', 'kerjaPraktek']);
 
-        // --- LOGIKA BARU: Filter berdasarkan peran ---
-        // Jika yang login adalah Dosen Pembimbing (dan bukan Komisi), filter hanya untuk mahasiswa bimbingannya
         if ($user->role === 'Dosen Pembimbing' && $user->dosen) {
             $dosenId = $user->dosen->id;
             $query->whereHas('kerjaPraktek', function ($q) use ($dosenId) {
                 $q->where('dosen_pembimbing_id', $dosenId);
             });
         }
-        // Untuk Bapendik dan Dosen Komisi, tidak ada filter tambahan, tampilkan semua.
 
-        // Terapkan pencarian
         $query->whereHas('mahasiswa', function ($subq) {
             $subq->when($this->search, function ($q) {
                 $q->where('nama_mahasiswa', 'like', '%' . $this->search . '%')
@@ -127,14 +121,12 @@ new #[Title('Laporan & Arsip KP')] #[Layout('components.layouts.app')] class ext
 }; ?>
 
 <div>
-    {{-- Header Halaman --}}
-    <div class="flex items-center justify-between">
+    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
         <div>
             <flux:heading size="xl" level="1">Laporan & Arsip</flux:heading>
-            <flux:subheading size="lg" class="mb-6">Pusat data untuk semua riwayat Kerja Praktik dan Laporan Final.</flux:subheading>
+            <flux:subheading size="lg">Pusat data untuk semua riwayat Kerja Praktik dan Laporan Final.</flux:subheading>
         </div>
         <div>
-            {{-- Tombol Ekspor yang sudah dinamis --}}
             <a href="{{ route('laporan.export-kp', [
                 'q' => $search,
                 'statusFilter' => $statusFilter,
@@ -146,119 +138,142 @@ new #[Title('Laporan & Arsip KP')] #[Layout('components.layouts.app')] class ext
             </a>
         </div>
     </div>
-    <flux:separator variant="subtle"/>
 
-    <flux:tab.group class="mt-4">
-        <flux:tabs wire:model.live="tab">
-            <flux:tab name="kp">Arsip Kerja Praktik</flux:tab>
-            <flux:tab name="distribusi">Arsip Laporan Final</flux:tab>
-        </flux:tabs>
-
-        {{-- Panel untuk Tab "Arsip Kerja Praktik" --}}
-        <flux:tab.panel name="kp">
-            <flux:card class="mt-4">
-                {{-- Header Card dengan Search & Filter --}}
-                <div class="flex flex-col sm:flex-row items-center justify-between gap-4 p-4 border-b dark:border-neutral-700">
-                    <div class="flex-1 w-full">
-                        <flux:input wire:model.live.debounce.300ms="search" placeholder="Cari mhs, nim, dospem, atau judul..." icon="magnifying-glass" />
+    {{-- [START] PERUBAHAN LAYOUT MENJADI DUA KOLOM --}}
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
+        
+        {{-- Kolom Kiri (Utama): Tabel dan Tab --}}
+        <div class="lg:col-span-2 space-y-6">
+            <flux:tab.group>
+                <flux:tabs wire:model.live="tab">
+                    <flux:tab name="kp">Arsip Kerja Praktik</flux:tab>
+                    <flux:tab name="distribusi">Arsip Laporan Final</flux:tab>
+                </flux:tabs>
+        
+                <flux:tab.panel name="kp">
+                    <flux:card class="mt-4">
+                        <div class="flex flex-col sm:flex-row items-center justify-between gap-4 p-4 border-b dark:border-neutral-700">
+                            <div class="flex-1 w-full">
+                                <flux:input wire:model.live.debounce.300ms="search" placeholder="Cari mhs, nim, dospem, atau judul..." icon="magnifying-glass" />
+                            </div>
+                            <div class="flex w-full sm:w-auto gap-2">
+                                <flux:select wire:model.live="jurusanFilter" class="w-full sm:w-48">
+                                    <option value="">Semua Jurusan</option>
+                                    @foreach($this->jurusans as $jurusan)
+                                        <option value="{{ $jurusan->id }}">{{ $jurusan->nama_jurusan }}</option>
+                                    @endforeach
+                                </flux:select>
+                                <flux:select wire:model.live="statusFilter" class="w-full sm:w-48">
+                                    <option value="">Semua Status KP</option>
+                                    <option value="Berlangsung">Berlangsung</option>
+                                    <option value="Selesai">Selesai</option>
+                                    <option value="Batal">Batal</option>
+                                </flux:select>
+                                <flux:date-picker wire:model.live="dateRange" mode="range" class="w-full sm:w-64" with-presets clearable />
+                            </div>
+                        </div>
+        
+                        <flux:table :paginate="$this->arsipKp">
+                            <flux:table.columns>
+                                <flux:table.column>Mahasiswa</flux:table.column>
+                                <flux:table.column sortable :sorted="$this->sortField === 'tanggal_pengajuan_kp'" :direction="$this->sortDirection" wire:click="sortBy('tanggal_pengajuan_kp')">Tgl. Pengajuan</flux:table.column>
+                                <flux:table.column>Dosen Pembimbing</flux:table.column>
+                                <flux:table.column>Status KP</flux:table.column>
+                                <flux:table.column>Nilai Akhir</flux:table.column>
+                            </flux:table.columns>
+                            <flux:table.rows>
+                                @forelse ($this->arsipKp as $kp)
+                                    <flux:table.row :key="$kp->id">
+                                        <flux:table.cell variant="strong">
+                                            {{ $kp->mahasiswa->nama_mahasiswa }}
+                                            <span class="block text-xs font-normal text-zinc-500">{{ $kp->mahasiswa->nim }}</span>
+                                        </flux:table.cell>
+                                        <flux:table.cell>{{ \Carbon\Carbon::parse($kp->tanggal_pengajuan_kp)->format('d/m/Y') }}</flux:table.cell>
+                                        <flux:table.cell>{{ $kp->dosenPembimbing->nama_dosen ?? '-' }}</flux:table.cell>
+                                        <flux:table.cell>
+                                            @if($kp->status_kp)
+                                                <flux:badge :color="match($kp->status_kp) {'Berlangsung' => 'blue', 'Selesai' => 'green', 'Batal' => 'red', default => 'zinc'}" size="sm">{{ $kp->status_kp }}</flux:badge>
+                                            @else
+                                                <span class="text-zinc-500 italic">{{$kp->status_pengajuan_kp}}</span>
+                                            @endif
+                                        </flux:table.cell>
+                                        <flux:table.cell>
+                                            @if($kp->seminar?->nilai_akhir)
+                                                <flux:badge color="primary" size="sm">{{ $kp->seminar->nilai_akhir }}</flux:badge>
+                                            @else - @endif
+                                        </flux:table.cell>
+                                    </flux:table.row>
+                                @empty
+                                    <flux:table.row><flux:table.cell colspan="5" class="text-center py-12 text-zinc-500">Tidak ada data ditemukan.</flux:table.cell></flux:table.row>
+                                @endforelse
+                            </flux:table.rows>
+                        </flux:table>
+                    </flux:card>
+                </flux:tab.panel>
+        
+                <flux:tab.panel name="distribusi">
+                    <flux:card class="mt-4">
+                        <div class="p-4 border-b dark:border-neutral-700">
+                            <flux:input wire:model.live.debounce.300ms="search"
+                                        placeholder="Cari berdasarkan nama atau NIM mahasiswa..." icon="magnifying-glass"/>
+                        </div>
+        
+                        <flux:table :paginate="$this->arsipDistribusi">
+                            <flux:table.columns>
+                                <flux:table.column>Nama Mahasiswa</flux:table.column>
+                                <flux:table.column>NIM</flux:table.column>
+                                <flux:table.column>Judul KP</flux:table.column>
+                                <flux:table.column>Tanggal Upload</flux:table.column>
+                                <flux:table.column>Aksi</flux:table.column>
+                            </flux:table.columns>
+                            <flux:table.rows>
+                                @forelse ($this->arsipDistribusi as $distribusi)
+                                    <flux:table.row :key="$distribusi->id">
+                                        <flux:table.cell variant="strong">{{ $distribusi->mahasiswa->nama_mahasiswa }}</flux:table.cell>
+                                        <flux:table.cell>{{ $distribusi->mahasiswa->nim }}</flux:table.cell>
+                                        <flux:table.cell>{{ Str::limit($distribusi->kerjaPraktek->judul_kp, 40) }}</flux:table.cell>
+                                        <flux:table.cell>{{ \Carbon\Carbon::parse($distribusi->tanggal_distribusi)->format('d/m/Y') }}</flux:table.cell>
+                                        <flux:table.cell>
+                                            <flux:button as="a" href="{{ asset('storage/' . $distribusi->berkas_distribusi) }}"
+                                                        target="_blank" size="xs" icon="document-arrow-down">
+                                                Unduh Berkas
+                                            </flux:button>
+                                        </flux:table.cell>
+                                    </flux:table.row>
+                                @empty
+                                    <flux:table.row>
+                                        <flux:table.cell colspan="5" class="text-center py-12 text-zinc-500">Tidak ada data distribusi ditemukan.
+                                        </flux:table.cell>
+                                    </flux:table.row>
+                                @endforelse
+                            </flux:table.rows>
+                        </flux:table>
+                    </flux:card>
+                </flux:tab.panel>
+            </flux:tab.group>
+        </div>
+        
+        {{-- Kolom Kanan (Informasi) --}}
+        <div class="lg:col-span-1 space-y-8">
+            <flux:card>
+                <h3 class="text-lg font-semibold mb-4">Pusat Laporan & Arsip</h3>
+                <div class="space-y-4 text-sm text-zinc-600 dark:text-zinc-400">
+                    <p>Halaman ini berfungsi sebagai pusat data untuk seluruh aktivitas Kerja Praktik yang telah atau sedang berlangsung.</p>
+                    <div>
+                        <p class="font-semibold">Tab Arsip Kerja Praktik:</p>
+                        <p>Menampilkan semua data KP dari awal pengajuan hingga selesai. Gunakan filter yang tersedia untuk menyaring data berdasarkan jurusan, status, dan rentang tanggal untuk keperluan pelaporan.</p>
                     </div>
-                    <div class="flex w-full sm:w-auto gap-2">
-                        <flux:select wire:model.live="jurusanFilter" class="w-full sm:w-48" placeholder="Filter Jurusan">
-                            <option value="">Semua Jurusan</option>
-                            @foreach($this->jurusans as $jurusan)
-                                <option value="{{ $jurusan->id }}">{{ $jurusan->nama_jurusan }}</option>
-                            @endforeach
-                        </flux:select>
-                        <flux:select wire:model.live="statusFilter" class="w-full sm:w-48" placeholder="Filter Status KP">
-                            <option value="">Semua Status KP</option>
-                            <option value="Berlangsung">Berlangsung</option>
-                            <option value="Selesai">Selesai</option>
-                            <option value="Batal">Batal</option>
-                        </flux:select>
-                        <flux:date-picker wire:model.live="dateRange" mode="range" class="w-full sm:w-64" with-presets clearable />
+                     <div>
+                        <p class="font-semibold">Tab Arsip Laporan Final:</p>
+                        <p>Berisi kumpulan bukti distribusi laporan (seperti lembar pengesahan) yang diunggah oleh mahasiswa sebagai tahap akhir dari proses KP mereka.</p>
+                    </div>
+                    <div>
+                        <p class="font-semibold">Fitur Ekspor:</p>
+                        <p>Gunakan tombol "Ekspor Data" untuk mengunduh data dari tab "Arsip Kerja Praktik" dalam format Excel. Data yang diekspor akan sesuai dengan filter yang sedang Anda terapkan.</p>
                     </div>
                 </div>
-
-                <flux:table :paginate="$this->arsipKp">
-                    <flux:table.columns>
-                        <flux:table.column>Mahasiswa</flux:table.column>
-                        {{-- KOLOM BARU --}}
-                        <flux:table.column sortable :sorted="$this->sortField === 'tanggal_pengajuan_kp'" :direction="$this->sortDirection" wire:click="sortBy('tanggal_pengajuan_kp')">Tgl. Pengajuan</flux:table.column>
-                        <flux:table.column>Dosen Pembimbing</flux:table.column>
-                        <flux:table.column>Status KP</flux:table.column>
-                        <flux:table.column>Nilai Akhir</flux:table.column>
-                    </flux:table.columns>
-                    <flux:table.rows>
-                        @forelse ($this->arsipKp as $kp)
-                            <flux:table.row :key="$kp->id">
-                                <flux:table.cell variant="strong">
-                                    {{ $kp->mahasiswa->nama_mahasiswa }}
-                                    <span class="block text-xs font-normal text-zinc-500">{{ $kp->mahasiswa->nim }}</span>
-                                </flux:table.cell>
-                                {{-- DATA BARU --}}
-                                <flux:table.cell>{{ \Carbon\Carbon::parse($kp->tanggal_pengajuan_kp)->format('d/m/Y') }}</flux:table.cell>
-                                <flux:table.cell>{{ $kp->dosenPembimbing->nama_dosen ?? '-' }}</flux:table.cell>
-                                <flux:table.cell>
-                                    @if($kp->status_kp)
-                                        <flux:badge :color="match($kp->status_kp) {'Berlangsung' => 'blue', 'Selesai' => 'green', 'Batal' => 'red', default => 'zinc'}" size="sm">{{ $kp->status_kp }}</flux:badge>
-                                    @else
-                                        <span class="text-zinc-500 italic">{{$kp->status_pengajuan_kp}}</span>
-                                    @endif
-                                </flux:table.cell>
-                                <flux:table.cell>
-                                    @if($kp->seminar?->nilai_akhir)
-                                        <flux:badge color="primary" size="sm">{{ $kp->seminar->nilai_akhir }}</flux:badge>
-                                    @else - @endif
-                                </flux:table.cell>
-                            </flux:table.row>
-                        @empty
-                            <flux:table.row><flux:table.cell colspan="5" class="text-center">Tidak ada data ditemukan.</flux:table.cell></flux:table.row>
-                        @endforelse
-                    </flux:table.rows>
-                </flux:table>
             </flux:card>
-        </flux:tab.panel>
-
-        {{-- Panel untuk Tab "Arsip Laporan Final" --}}
-        <flux:tab.panel name="distribusi">
-            <flux:card class="mt-4">
-                <div class="p-4 border-b dark:border-neutral-700">
-                    <flux:input wire:model.live.debounce.300ms="search"
-                                placeholder="Cari berdasarkan nama atau NIM mahasiswa..." icon="magnifying-glass"/>
-                </div>
-
-                <flux:table :paginate="$this->arsipDistribusi">
-                    <flux:table.columns>
-                        <flux:table.column>Nama Mahasiswa</flux:table.column>
-                        <flux:table.column>NIM</flux:table.column>
-                        <flux:table.column>Judul KP</flux:table.column>
-                        <flux:table.column>Tanggal Upload</flux:table.column>
-                        <flux:table.column>Aksi</flux:table.column>
-                    </flux:table.columns>
-                    <flux:table.rows>
-                        @forelse ($this->arsipDistribusi as $distribusi)
-                            <flux:table.row :key="$distribusi->id">
-                                <flux:table.cell
-                                    variant="strong">{{ $distribusi->mahasiswa->nama_mahasiswa }}</flux:table.cell>
-                                <flux:table.cell>{{ $distribusi->mahasiswa->nim }}</flux:table.cell>
-                                <flux:table.cell>{{ Str::limit($distribusi->kerjaPraktek->judul_kp, 40) }}</flux:table.cell>
-                                <flux:table.cell>{{ \Carbon\Carbon::parse($distribusi->tanggal_distribusi)->format('d/m/Y') }}</flux:table.cell>
-                                <flux:table.cell>
-                                    <flux:button as="a" href="{{ asset('storage/' . $distribusi->berkas_distribusi) }}"
-                                                 target="_blank" size="xs" icon="document-arrow-down">
-                                        Unduh Berkas
-                                    </flux:button>
-                                </flux:table.cell>
-                            </flux:table.row>
-                        @empty
-                            <flux:table.row>
-                                <flux:table.cell colspan="5" class="text-center">Tidak ada data distribusi ditemukan.
-                                </flux:table.cell>
-                            </flux:table.row>
-                        @endforelse
-                    </flux:table.rows>
-                </flux:table>
-            </flux:card>
-        </flux:tab.panel>
-    </flux:tab.group>
+        </div>
+    </div>
+    {{-- [END] PERUBAHAN LAYOUT --}}
 </div>
